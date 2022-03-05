@@ -4,6 +4,7 @@ n_core <- parallel::detectCores()
 
 ## image, design, analysis info
 
+sec_tr <- 1.2  ## seconds per tr
 n_vert <- 20484  ## surface hcp mesh
 n_trs <- c(
   Axcpt_baseline   = 1220,
@@ -42,9 +43,17 @@ waves <- c("wave1", "wave2", "wave3")
 wavedir_image <- c(wave1 = "HCP_SUBJECTS_BACKUPS", wave2 = "DMCC_Phase3", wave3 = "DMCC_Phase4")
 wavedir_evts <- c(wave1 = "DMCC2", wave2 = "DMCC3", wave3 = "DMCC4")
 
-subjs_wave12_all <- data.table::fread(here::here("in", "subjects_wave12_all.txt"))$V1
-subjs_wave12_good <- data.table::fread(here::here("in", "subjects_wave12_good.txt"))$V1
-subjs_wave12_prob <- data.table::fread(here::here("in", "subjects_wave12_prob.txt"))$V1
+
+
+subjs_wave12_all <- data.table::fread(here::here("in", "subjects_wave12_all.txt"), header = FALSE)$V1
+subjs_wave12_good <- data.table::fread(here::here("in", "subjects_wave12_good.txt"), header = FALSE)$V1
+subjs_wave12_prob <- data.table::fread(here::here("in", "subjects_wave12_prob.txt"), header = FALSE)$V1
+
+## DMCC8033964: does not have stroop wav 1 bas run 2
+## DMCC9478705: preprocessing failed (rerunning)
+
+subjs_wave12_all <- setdiff(subjs_wave12_all, c("DMCC9478705", "DMCC8033964"))
+subjs_wave12_good <- setdiff(subjs_wave12_good, c("DMCC9478705", "DMCC8033964"))
 
 name_glms_dmcc <- c(
   Axcpt = "Cues_EVENTS_censored",

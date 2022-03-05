@@ -3,7 +3,7 @@
 ## setup ----
 
 conda deactivate
-cd /data/nil-external/ccp/freund/trr
+cd $path_project
 
 
 if [ $do_single_subj = false ]
@@ -64,9 +64,9 @@ for wave in ${waves[@]}; do
     # paths:
 
     stimts=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/  ## JUST NEED MOVEMENT REGS
-    out=/data/nil-external/ccp/freund/trr/out/timeseries/
+    out=$path_project/out/timeseries/
     img=/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/$wave_dir/fMRIPrep_AFNI_ANALYSIS/
-    scripts=/data/nil-external/ccp/freund/trr/code/timeseries/
+    scripts=$path_project/code/timeseries/
 
     for subject in ${subjects[@]}; do
 
