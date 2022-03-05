@@ -1,14 +1,21 @@
 # trr
+
 Test--Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control dataset
 
-## factors
+## repo organization
+
+- all analysis scripts in `code/`
+- scripts in `code` write to `out/`
+- `in/` contains behavioral data files, subject lists
+- files in `in/` are not modified by any scripts
+
+## key factors in DMCC dataset
 
 - trialtype: "high demand" (difficult trials), "low demand" (easy trials)
 - run: run1, run2
 - task: Axcpt, Cuedts, Stern, Stroop
 - session: baseline, proactive, reactive
 - wave: wave1, wave2 (wave1 = test, wave2 = retest)
-
 
 ## relevant links, paths
 
