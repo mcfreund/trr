@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-path_project=/home/chenr/trr
+path_project=/home/usr/chenr/trr
 
 glm_prefix="null_2rpm"  ## name of subdirectory in scripts; will be added to subdirectory name in out
 subjects_file=in/subjects_wave12_all.txt
