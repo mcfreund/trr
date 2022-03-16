@@ -3,52 +3,41 @@ read_gifti2matrix <- function(name){
     matrix(unlist(d, use.names = FALSE), nrow = length(d), byrow = TRUE)
 }
 
-read_results <- function(waves, tasks, sessions, subjs, glmname, filename_fun, read_fun) {
+read_results <- function(waves, tasks, sessions, subjs, glmname, filename_fun, read_fun, n_cores = 20) {
   
-  
-  l <- enlist(mfutils::combo_paste(waves, tasks, sessions, subjs))
-  
-  for (wave_i in seq_along(waves)) {
-    
-    name_wave_i <- waves[wave_i]
-    
-    for (task_i in seq_along(tasks)) {
-      
-      name_task_i <- tasks[task_i]
-      
-      for (session_i in seq_along(sessions)) {
-        
-        name_session_i <- sessions[session_i]
-        
-        for (subj_i in seq_along(subjs)) {
-          
-          name_subj_i <- subjs[subj_i]
-          
-          filename <- filename_fun(
-            name_wave_i = name_wave_i, name_task_i = name_task_i, name_session_i = name_session_i, 
-            name_subj_i = name_subj_i, glmname = glmname
-          )
-          
-          filename_full <- 
-            here::here(
-              "out", "timeseries", name_subj_i, "RESULTS", name_task_i, 
-              paste0(name_session_i, "_", glmname, "_", name_wave_i), 
-              filename
-              )
 
-          nm <- paste0(name_wave_i, "_", name_task_i, "_", name_session_i, "_", name_subj_i)
-          l[[nm]] <- read_fun(filename_full)
-          
-          
-        }
-        
-      }
+  cl <- parallel::makeCluster(n_cores, type = "FORK")
+  doParallel::registerDoParallel(cl)
+  res <- 
+    foreach::foreach(task_i = seq_along(tasks), .inorder = FALSE, .combine = "c") %:%
+    foreach::foreach(wave_i = seq_along(waves), .inorder = FALSE, .combine = "c") %:%
+    foreach::foreach(session_i = seq_along(sessions), .inorder = FALSE, .combine = "c") %:%
+    foreach::foreach(subj_i = seq_along(subjs), .inorder = FALSE, .combine = "c") %dopar% {
       
-    }
-    
+      name_wave_i <- waves[wave_i]
+      name_task_i <- tasks[task_i]
+      name_session_i <- sessions[session_i]
+      name_subj_i <- subjs[subj_i]
+      
+      filename <- filename_fun(
+        name_wave_i = name_wave_i, name_task_i = name_task_i, name_session_i = name_session_i, 
+        name_subj_i = name_subj_i, glmname = glmname
+      )
+      
+      filename_full <- 
+        here::here(
+          "out", "timeseries", name_subj_i, "RESULTS", name_task_i, 
+          paste0(name_session_i, "_", glmname, "_", name_wave_i), 
+          filename
+          )
+      
+      nm <- paste0(name_wave_i, "_", name_task_i, "_", name_session_i, "_", name_subj_i)
+      setNames(list(read_fun(filename_full)), nm)
+            
   }
+  parallel::stopCluster(cl)
   
-  l
+  res
   
 }
 
@@ -193,3 +182,6 @@ read_betas_dmcc <- function(
   
 }
 
+afni <- function (f, args, afni_path = "/usr/local/pkg/linux_openmp_64/", ...) {
+    system2(command = paste0(afni_path, f), args = args, stdout = TRUE, ...)
+}
