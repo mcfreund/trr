@@ -1,15 +1,11 @@
-library(colorout)
-library(httpgd)
 library(here)
-library(reticulate)
 library(tidyr)
 library(dplyr)
-library(magrittr)
 library(data.table)
 library(abind)
 library(doParallel)
 library(foreach)
-library(mikeutils)
+library(mfutils)
 library(progress)
 library(ggplot2)
 library(grid)
@@ -17,48 +13,28 @@ library(gridExtra)
 library(cowplot)
 library(viridis)
 library(purrr)
+source(here("code", "_constants.R"))
+source(here("code", "_funs.R"))
 
 theme_set(theme_half_open())
-hgd()
-
-
-source(here("code", "_constants.R"))
-source(here("code", "_atlases.R"))
-source(here("..", "ub55", "code", "_funs.R"))  ## for read_betas_dmcc()
-source(here("code", "_funs.R"))
-source(here("code", "_read_behav_wave12.R"))
-
-
 
 ## input vars ----
 
-atlas <- "schaefer"
-subjs <- subjs_wave12
+atlas_nm <- "schaefer2018_7_400_fsaverage5"
 do_waves <- c(1, 2)
+subjs <- subjs_wave12_all
 hi <- c(Axcpt = "BX", Cuedts = "InConInc", Stern = "LL5RN", Stroop = "biasInCon")
 lo <- c(Axcpt = "BY", Cuedts = "ConInc", Stern = "LL5NN", Stroop = "biasCon")
+atlas <- get(atlas_nm)
+is_core32 <- atlas$data %in% core32  ## indicates vertices that belong to "core32", a set of 32 ROIs (parcels)
 waves <- waves[do_waves]
 
-
-## wrangle behavioral data:
-
-behav_wave12$Axcpt <- rename(behav_wave12$Axcpt, rt = target.rt)
-cols <- c("wave", "run", "session", "subj", "trialtype", "rt", "acc", "trial.num")
-behav_wave12 <- lapply(behav_wave12, function(x) x[, ..cols])
-behav_wave12 <- rbindlist(behav_wave12, idcol = "task")
-behav_wave12 <- behav_wave12[order(wave, task, session, subj, run, trial.num), ]
-behav_wave12[, trialnum := 1:.N, by = c("wave", "task", "subj", "session")]
-behav_wave12[, c("run", "trial.num") := NULL]
-behav_wave12[, wave := paste0("wave", wave)]
-
-behav_wave12[session == "bas"]$session <- "baseline"
-behav_wave12[session == "pro"]$session <- "proactive"
-behav_wave12[session == "rea"]$session <- "reactive"
+behav_wave12 <- fread(here("in", "behav", "behavior-and-events_wave12_alltasks.csv"))
+behav_wave12 <- behav_wave12[subj %in% subjs]
 
 
 
-## execute ----
-
+## run ----
 
 fn <- here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv")
 
@@ -69,6 +45,7 @@ if (file.exists(fn)) {
   
 } else {
   
+  ## iterators for dev
   # wave_i = 2
   # task_i = 4
   # session_i = 3
@@ -78,21 +55,19 @@ if (file.exists(fn)) {
 
   
   res <- enlist(combo_paste(waves, tasks, sessions))
-  for (wave_i in seq_along(waves)) {
-    
+  for (wave_i in seq_along(waves)) {  
     for (task_i in seq_along(tasks)) {
-      
       for (session_i in seq_along(sessions)) {
        
-        
         task_val <- tasks[task_i]
         wave_val <- waves[wave_i]
         session_val <- sessions[session_i]
         trialtype_val <- c(hi = hi[[task_val]], lo = lo[[task_val]])
         
         
-        ## read trial-level residuals, condition-level betas
+        ## read trial-level coefficients (from selective averaging) and condition-level coefficients (from GLMs)
         
+        ## trial-level coefs from selective averaging:
         resid <- read_results(
           wave_val, task_val, session_val, subjs,
           glmname = "null_2rpm", 
@@ -100,7 +75,7 @@ if (file.exists(fn)) {
           read_fun = readRDS
         )
         names(resid) <- gsub(paste0(wave_val, "_", task_val, "_", session_val, "_"), "", names(resid))
-        
+
         betas <- read_betas_dmcc(
           .subjs = subjs, 
           .task = task_val, 
@@ -108,53 +83,54 @@ if (file.exists(fn)) {
           .dir = file.path(
             "/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS", wavedir_image[wave_val], "fMRIPrep_AFNI_ANALYSIS"
             )
-        )
+        )  ## condition-level coefs from GLM
         
         
         ## extract core32 etc...
-        
-        is_core32 <- schaefer10k %in% core32
         resid32 <- lapply(resid, function(x) x[, is_core32])
         betas32 <- betas[is_core32, trialtype_val, target_trs[[task_val]], ]
-        rm(resid, betas)
-        gc()
+        rm(resid, betas)  ## remove from global env
+        gc()  ## free memory
         
         
-        ## residuals: get hilo contrast
+        ## get high-demand minus low-demand contrast
+
+        ## first for selective-averaged coefs:
         
-        l <- 
-          behav_wave12[wave == wave_val & task == task_val & session == session_val] %>% 
-          split(.$subj)
-        
+        ## get vector A that averages over trials (by trialtype) and contrasts averages across trialtypes:
         A <- 
-          lapply(
-            l, 
-            function(x) {
-              A <- model.matrix(~ 0 + trialtype, x)
-              A <- sweep(A, 2, colSums(A), "/")
-              colnames(A) <- gsub("trialtype", "", colnames(A))
-              A[, trialtype_val] %*% rbind(1, -1)  ## gives hilo contrast
-            }
-            )
+          behav_wave12[wave == wave_val & task == task_val & session == session_val] %>% 
+          split(.$subj) %>%
+          lapply(function(x) averaging_matrix(x$trialtype)[, trialtype_val] %*% rbind(1, -1))
         resid32 <- resid32[names(A)]  ## make sure have same order
-        
-        resid_sum <- map2(A, resid32, ~crossprod(.x, .y))
+
+        resid_sum <- 
+          map2(
+            A, resid32, 
+            function(.x, .y) {
+                is_censored_trial <- is.na(rowSums(.y))
+                crossprod(.x[!is_censored_trial, ], .y[!is_censored_trial, ])
+                }
+          )  ## apply
         resid_sum <- abind(resid_sum, along = 1)
+        ## resid_sum is a subject by vertex matrix. 
+        ## each vertex indicates the average difference (over trials) in BOLD signal between high-demand and low-demand 
+        ## conditions, within our frontoparietal regions of interest (core32)        
         
-        
-        ## betas: get hilo contrast
-        
-        betas32 <- aperm(betas32, c(1, 2, 4, 3))  ## put TR on 'outside'
-        
-        b <- rowMeans(betas32, dims = 3)
+        ## now, for condition-level GLM coefficients:
+        betas32 <- aperm(betas32, c(1, 2, 4, 3))  ## put TR on 'outside'        
+        b <- rowMeans(betas32, dims = 3)  ## average over TRs
         b <- b[, trialtype_val["hi"], ] - b[, trialtype_val["lo"], ]
         
+        ## reduce to common set of subjects
+        resid_sum <- t(resid_sum)
+        subjs_intersect <- intersect(colnames(resid_sum), colnames(b))
+        resid_sum <- resid_sum[, subjs_intersect]
+        b <- b[, subjs_intersect]
         
         ## correlate:
         
-        resid_sum <- t(resid_sum)
-        
-        r <- colSums(scale2unit(meancenter(resid_sum)) * scale2unit(meancenter(b)))  ## linear corr
+        r <- colSums(scale2unit(center(resid_sum)) * scale2unit(center(b)))  ## linear corr
         neg_rmse <- -sqrt(colMeans((resid_sum - b) * (resid_sum - b)))  ## negative root mean square
         
         nm <- paste0(wave_val, "_", task_val, "_", session_val)
@@ -163,10 +139,8 @@ if (file.exists(fn)) {
         print(nm)
   
         
-      }
-      
-    }
-    
+      } 
+    }  
   }
   
   
@@ -174,7 +148,7 @@ if (file.exists(fn)) {
   d <- rbindlist(res, idcol = "id")
   d <- separate(d, id, c("wave", "task", "session"))
   
-  fwrite(d, here("out", "icc", "trial-level-recovery_hilo_core32_wave12.csv"))
+  fwrite(d, here("out", "timeseries", "trial-level-recovery_hilo_core32_wave12.csv"))
   
 }
 
@@ -198,18 +172,15 @@ p_cor_box <- d %>%
   theme(strip.background = element_blank())
 
 p_cor_box
-ggsave(here("out", "test_retest", "figs", "recovery_box_cor_hilo_core32.pdf"), p_cor_box, dev = "pdf", width = 7, height = 4)
+ggsave(here("out", "figs", "timeseries-comparison_glm-vs-selav_hilo-correlation_core32.pdf"), dev = "pdf", width = 7, height = 4)
 
 
 
-p_cor_box_subj <- d %>%
+d %>%
   ggplot(aes(r, subj)) +
   geom_boxplot(width = 0.2, fill = "grey40")
 
-p_cor_box_subj
-
 ggsave(
-  here("out", "test_retest", "figs", "recovery_box_subj_cor_hilo_core32.pdf"), 
-  p_cor_box_subj, 
+  here("out", "figs", "timeseries-comparison_glm-vs-selav_hilo-correlation_core32_subjs.pdf"), 
   dev = "pdf", width = 4.5, height = 5
   )
