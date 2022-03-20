@@ -33,39 +33,39 @@ for (subj_i in seq_along(subjs)) {
         # Get the indices of trial onsets (use > 0.9 due to rounding problems)
         x_trial_start_idx <- sort(which(x[, conditions] > 0.9, arr.ind = T)[, 1])
 
-        # debugging
-        if (debugging) debug_offset <- 0 else debug_offset <- 1
-
-        # Build an A matrix (TR by trials) according to X
-        a_from_x <- matrix(0, nrow = n_trs[name_task_session],
-            ncol = length(do_waves) * n_trialspr[name_task_session])
-        x_target_tr_idx <- rep(x_trial_start_idx, each = n_targets) +
+        # Target TR indices
+        if (debugging) debug_offset <- 0 else debug_offset <- 1  # debugging
+        x_target_idx <- rep(x_trial_start_idx, each = n_targets) +
             target_trs[[name_task]] - debug_offset
-        x_target_tr_idx <- cbind(x_target_tr_idx,
-            rep(seq_along(x_trial_start_idx), each = n_targets))
-        a_from_x[x_target_tr_idx] <- 1 / n_targets
+        dim(x_target_idx) <- c(n_targets, length(x_trial_start_idx))
 
         # Load A
         name_glm <- paste0(name_session, "_", "null_2rpm_", waves[wave_i])
         dir_glm <- here("out", "timeseries", subjs[subj_i], "RESULTS", name_task, name_glm)
         a <- readRDS(here(dir_glm, paste0(resid_type, "_averaging_matrix.RDS")))
 
-        # Compare A and X by multiplication
-        temp <- t(a) %*% x  # Trial by regressors
-
-        if (debugging) {
-            n_trial_x <- length(x_trial_start_idx)
-            n_trial_a <- sum(colSums(a) != 0)
-            if (n_trial_x != n_trial_a) {
-                print(paste0("Subject: ", subj_i, ", wave: ", wave_i,
-                    ", number of trials found in X: ", n_trial_x,
-                    ", number of trials found in A: ", n_trial_a))
+        for (i in seq_along(x_trial_start_idx)) {
+            if (sum(a[x_target_idx[, i], ], na.rm = T) < 0.99) {
+                print(paste0("Error found for subject: ", subj_i, ", wave: ", wave_i,
+                    ",  trial (in X): ", i))
+                print(paste0("Sum of A[target_TRs, ]: ",
+                    sum(a[x_target_idx[, i], ], na.rm = T)))
+                stop()
             }
         }
-        # print(which(a != a_from_x,  arr.ind = T))
 
-        if (debugging) break
+        # if (debugging) {
+        #     n_trial_x <- length(x_trial_start_idx)
+        #     n_trial_a <- sum(colSums(a) != 0)
+        #     if (n_trial_x != n_trial_a) {
+        #         print(paste0("Subject: ", subj_i, ", wave: ", wave_i,
+        #             ", number of trials found in X: ", n_trial_x,
+        #             ", number of trials found in A: ", n_trial_a))
+        #     }
+        # }
+
+        # if (debugging) break
 
     }
-    if (debugging) break
+    # if (debugging) break
 }
