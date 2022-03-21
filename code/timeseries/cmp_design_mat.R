@@ -50,7 +50,8 @@ for (subj_i in seq_along(subjs)) {
                     ",  trial (in X): ", i))
                 print(paste0("Sum of A[target_TRs, ]: ",
                     sum(a[x_target_idx[, i], ], na.rm = T)))
-                stop()
+                print("X[target_TRs, ]: ")
+                print(x[x_target_idx[, i], ])
             }
         }
 
