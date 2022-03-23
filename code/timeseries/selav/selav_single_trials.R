@@ -173,7 +173,7 @@ res <-
     B <- crossprod(A, E)  ## trial by vertex matrix B
     # image(B)  ## view
     saveRDS(B, here(dir_glm, paste0(resid_type, "_trials_target_epoch.RDS")))
-    
+    saveRDS(A, here(dir_glm, paste0(resid_type, "_averaging_matrix.RDS")))
 }
 stopCluster(cl)
 
