@@ -186,5 +186,5 @@ allres <-
 }
 stopCluster(cl)
 
-fname <- paste0("projections__stroop__rda_lambda_", shrinkage_factor, ".csv")
+fname <- paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
 fwrite(allres, here("out", "spatial", fname))
