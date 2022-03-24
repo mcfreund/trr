@@ -22,7 +22,7 @@ test <- c("baseline")
 shrinkage_factor <- 100
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
-subjs <- subjs_wave12_all
+subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 do_waves <- c(1, 2)

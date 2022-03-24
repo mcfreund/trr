@@ -54,6 +54,7 @@ subjs_wave12_prob <- data.table::fread(here::here("in", "subjects_wave12_prob.tx
 
 subjs_wave12_all <- setdiff(subjs_wave12_all, c("DMCC9478705", "DMCC8033964"))
 subjs_wave12_good <- setdiff(subjs_wave12_good, c("DMCC9478705", "DMCC8033964"))
+subjs_wave12_complete <- setdiff(subjs_wave12_all, c("DMCC6418065", "DMCC6671683"))
 
 name_glms_dmcc <- c(
   Axcpt = "Cues_EVENTS_censored",
