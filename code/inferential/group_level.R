@@ -96,9 +96,9 @@ d_sum_group <- d_sum_subj %>%
   summarize(
     stat = t.test(hivlo)$statistic,
     p = t.test(hivlo)$p.value
-    )
+    )  # Splitting the table by "hilo_all" into "hi" and "lo", then compute t across subjects
 
-## correct p-values across all regions:
+## correct p-values across all regions (but not waves and sessions):
 d_sum_group <- d_sum_group %>%
   group_by(wave, session) %>%
   mutate(p_fdr = p.adjust(p, "fdr"))
@@ -125,12 +125,17 @@ d$hilo_all <- factor(d$hilo_all, levels = c("lo", "hi"))  ## ensure intercept is
 
 ## fit model to single ROI:
 
-fit <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave + hilo_all + (wave + hilo_all | subj), d[session == "baseline"])
-summary(fit)
-coef(summary(fit))
+fit_full <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave * hilo_all + (wave * hilo_all | subj),
+  d[session == "baseline"])
+summary(fit_full)
+fit_reduced <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave + hilo_all + (wave + hilo_all | subj),
+  d[session == "baseline"])
+fit_nowave <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ hilo_all + (hilo_all | subj),
+  d[session == "baseline"])
+anova(fit_nowave, fit_reduced, fit_full)
 
 
-## fit many models (all ROIs)
+## fit many models (all 400 ROIs)
 
 formulas <- paste0("`", rois, "` ~ wave + hilo_all + (wave + hilo_all | subj)")
 fits <- mclapply(formulas, function(x) lmer(as.formula(x), d[session == "baseline"]), mc.cores = n_cores)
