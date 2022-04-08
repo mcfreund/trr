@@ -33,7 +33,7 @@ n_resamples <- 100
 ## execute ----
 
 atlas <- get(atlas_nm)
-rois <- unique(atlas$key[[roi_col]])[1:10]
+rois <- unique(atlas$key[[roi_col]])
 waves <- waves[do_waves]
 n_classes <- length(classes)
 
