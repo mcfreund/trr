@@ -25,6 +25,7 @@ resid_type <- "errts"
 do_waves <- c(1, 2)
 n_cores <- 20
 tasks <- "Stroop"
+output_fname <- "univariate_linear_model.csv"
 
 theme_set(theme_bw(base_size = 12))
 theme_surface <- list(
@@ -142,3 +143,4 @@ fits <- mclapply(formulas, function(x) lmer(as.formula(x), d[session == "baselin
 names(fits) <- rois
 b <- rbindlist(lapply(fits, pull_fixef), idcol = "region")
 b
+write.csv(b, here("out", "spatial", output_fname))
