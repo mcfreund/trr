@@ -42,3 +42,6 @@ vignettes/*.pdf
 # large output / data files
 out/timeseries/
 out/spatial/
+
+# VS Code files
+.vscode/
