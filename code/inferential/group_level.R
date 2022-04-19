@@ -16,6 +16,7 @@ source(here("code", "inferential", "_plotting.R"))
 
 ########################### Constants ###########################
 
+n_roi_used <- -1  # Number of rois to look at (set as -1 to use all)
 subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
@@ -23,7 +24,6 @@ do_waves <- c(1, 2)
 waves <- waves[do_waves]
 n_cores <- 20
 tasks <- "Stroop"
-n_roi_used <- -1  # Number of rois to look at (set as -1 to use all)
 mle_output <- "univariate_linear_model.csv"
 bayes_output <- "univariate_bayesian_model.csv"
 
@@ -183,7 +183,7 @@ fit_bayes <- brm(bayes_model, input_for_bayes, cores = min(4, n_cores))
 # Fit all models
 formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
 fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes),
-  mc.cores = min(n_cores, n_roi_used))
+  mc.cores = n_cores)
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 
