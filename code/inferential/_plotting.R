@@ -1,20 +1,12 @@
-library(here)
-library(readr)
 library(tidyr)
 library(dplyr)
-library(mfutils)
 library(ggplot2)
-library(cowplot)
 library(viridis)
 library(patchwork)
 library(ggseg)
 library(ggsegExtra)
 library(ggsegSchaefer)
 library(ggsegGlasser)
-
-# Constants
-atlas_nm <- "schaefer2018_17_400_fsaverage5"
-roi_col <- "parcel"  ## "parcel" or "network"
 
 # Theme
 theme_set(theme_bw(base_size = 12))
@@ -26,15 +18,6 @@ theme_surface <- list(
     legend.key.height = unit(1 / 4, "cm"), legend.key.width = unit(1 / 3, "cm")
   )
 )
-
-# Atlas
-if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
-  rois <- get(atlas_nm)$key[[roi_col]]
-  atlas <- schaefer17_400
-  atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
-} else {
-  stop("not configured for atlas")
-}
 
 # Plotting function
 brain_plot <- function(df, eff_term = NULL, eff = NULL, stat_term = "tstat",
@@ -71,6 +54,25 @@ brain_plot <- function(df, eff_term = NULL, eff = NULL, stat_term = "tstat",
 
 # Main function when running this script directly
 if (sys.nframe() == 0) {
+
+  library(here)
+  library(readr)
+  library(mfutils)
+
+  # ROIs
+  atlas_nm <- "schaefer2018_17_400_fsaverage5"
+  roi_col <- "parcel"  ## "parcel" or "network"
+
+  # Atlas
+  if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
+    rois <- get(atlas_nm)$key[[roi_col]]
+    atlas <- schaefer17_400
+    atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
+  } else {
+    stop("not configured for atlas")
+  }
+
+  # Processing
   fname1 <- "multivariate_linear_model.csv"
   b1 <- read_csv(here("out", "spatial", fname1)) %>%
     mutate(term = ifelse(term == "hilo_alllo", "hilo_allhi", term)) %>%
