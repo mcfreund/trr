@@ -138,11 +138,11 @@ rois_bayes <- gsub("17Networks", "Networks", rois)
 # Fit a Bayesian model
 bayes_model <- as.formula(paste0("`", rois_bayes[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
 get_prior(bayes_model, input_for_bayes)
-fit_bayes <- brm(bayes_model, input_for_bayes, cores = min(4, n_cores))
+fit_bayes <- brm(bayes_model, input_for_bayes, cores = 1)
 
 # Fit all models
 formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
-fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes),
+fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes, cores = 1),
   mc.cores = n_cores)
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")

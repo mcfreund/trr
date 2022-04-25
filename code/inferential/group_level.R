@@ -16,7 +16,7 @@ source(here("code", "inferential", "_plotting.R"))
 
 ########################### Constants ###########################
 
-n_roi_used <- -1  # Number of rois to look at (set as -1 to use all)
+n_roi_used <- 2  # Number of rois to look at (set as -1 to use all)
 subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
@@ -171,19 +171,20 @@ write.csv(b, here("out", "spatial", mle_output))
 ############################# Fit Bayesian model #########################
 
 # Fix naming problems with brms() formulas
-input_for_bayes <- d[session == "baseline"] %>%
+input_for_bayes <- as_tibble(d[session == "baseline"]) %>%
+  filter(if_all(starts_with("17Networks"), ~ !is.na(.x))) %>%
   setNames(gsub("17Networks", "Networks", names(.)))
 rois_bayes <- gsub("17Networks", "Networks", rois)
 
 # Fit a Bayesian model
 bayes_model <- as.formula(paste0("`", rois_bayes[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
 get_prior(bayes_model, input_for_bayes)
-fit_bayes <- brm(bayes_model, input_for_bayes, cores = min(4, n_cores))
+fit_bayes <- brm(bayes_model, input_for_bayes, cores = 1)
 
 # Fit all models
 formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
-fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes),
-  mc.cores = n_cores)
+fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes, cores = 1),
+  mc.cores = min(length(formulas_bayes), n_cores))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 
