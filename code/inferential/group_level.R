@@ -16,7 +16,8 @@ source(here("code", "inferential", "_plotting.R"))
 
 ########################### Constants ###########################
 
-n_roi_used <- 2  # Number of rois to look at (set as -1 to use all)
+n_core_brm <- 4  # Number of cores for parallelization within brm()
+n_roi_used <- -1  # Number of rois to look at (set as -1 to use all)
 subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
@@ -179,12 +180,20 @@ rois_bayes <- gsub("17Networks", "Networks", rois)
 # Fit a Bayesian model
 bayes_model <- as.formula(paste0("`", rois_bayes[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
 get_prior(bayes_model, input_for_bayes)
-fit_bayes <- brm(bayes_model, input_for_bayes, cores = 1)
+fit_bayes <- brm(bayes_model, input_for_bayes, cores = n_core_brm)
 
 # Fit all models
 formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
-fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes, cores = 1),
-  mc.cores = min(length(formulas_bayes), n_cores))
+fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
+    brm(as.formula(x), input_for_bayes, cores = n_core_brm),
+    error = function(e) {
+      print()
+      print(e)
+      print()
+      return(NA)
+    }
+  ),
+  mc.cores = min(length(formulas_bayes), ceiling(n_cores / n_core_brm)))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 
