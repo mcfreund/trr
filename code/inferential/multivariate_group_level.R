@@ -143,7 +143,15 @@ fit_bayes <- brm(bayes_model, input_for_bayes, cores = n_core_brm)
 
 # Fit all models
 formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
-fits_bayes <- mclapply(formulas_bayes, function(x) brm(as.formula(x), input_for_bayes, cores = n_core_brm),
+fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
+    brm(as.formula(x), input_for_bayes, cores = n_core_brm),
+    error = function(e) {
+      print()
+      print(e)
+      print()
+      return(NA)
+    }
+  ),
   mc.cores = min(length(formulas_bayes), ceiling(n_cores / n_core_brm)))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
