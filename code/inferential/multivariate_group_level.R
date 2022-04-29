@@ -28,6 +28,9 @@ fname <- "projections__stroop__rda_lambda_100__n_resamples100.csv"
 mle_output <- "multivariate_linear_model.csv"
 bayes_output <- "multivariate_bayesian_model.csv"
 
+# Make sure we don't use more cores than available
+stopifnot(n_core_brm <= n_cores)
+
 # Atlas
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
@@ -61,6 +64,14 @@ pull_bayes_ef <- function(mdl) {
       add_column(Grouping = group, .before = "Term")
   }
 
+  # Summarize sampling statistics
+  vec2sum <- function(dat, term_name, group_name = NA) {
+    as_tibble(list(Term = term_name, Grouping = group_name,
+      Estimate = mean(dat), `Est.Error` = sd(dat),
+      `Q2.5` = quantile(dat, probs = 2.5 / 100),
+      `Q97.5` = quantile(dat, probs = 97.5 / 100)))
+  }
+
   # Fixed effects
   res_fix <- ef2tibble(fixef(mdl))
 
@@ -76,8 +87,28 @@ pull_bayes_ef <- function(mdl) {
   dat <- mdl$data[[mdl$formula$formula[[2]]]]
   res_dat <- as_tibble(list(Term = "Data_sd", Estimate = sd(dat)))
 
+  # Normalized effect (hilo|subj)/error, (wave|subj)/error
+  coefs <- as.data.frame(mdl)
+  errors <- coefs[, "sigma"]
+  hilo_subj <- coefs[, grep("^sd_subj__hilo*", names(coefs))] / errors
+  wave_subj <- coefs[, grep("^sd_subj__wave*", names(coefs))] / errors
+  group_eff_norm <- bind_rows(
+    vec2sum(hilo_subj, term_name = "hilo_allhi_norm", group_name = "subj"),
+    vec2sum(wave_subj, term_name = "wavewave2_norm", group_name = "subj")
+  )
+  
+  # Normalized fixed effects abs(wave)/data, error/data
+  hilo_norm <- coefs[, grep("^b_hilo*", names(coefs))] / res_dat$Estimate
+  wave_norm <- coefs[, grep("^b_wave*", names(coefs))] / res_dat$Estimate
+  error_norm <- errors / res_dat$Estimate
+  pop_eff_norm <- bind_rows(
+    vec2sum(hilo_norm, term_name = "hilo_allhi_norm"),
+    vec2sum(wave_norm, term_name = "wavewave2_norm"),
+    vec2sum(error_norm, term_name = "Residual_norm")
+  )
+
   # Combine them as the output
-  bind_rows(list(res_fix, res_rnd, res_dat))
+  bind_rows(list(res_fix, res_rnd, res_dat, group_eff_norm, pop_eff_norm))
 
 }
 
@@ -152,7 +183,7 @@ fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
       return(NA)
     }
   ),
-  mc.cores = min(length(formulas_bayes), ceiling(n_cores / n_core_brm)))
+  mc.cores = min(length(formulas_bayes), n_cores %/% n_core_brm))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 

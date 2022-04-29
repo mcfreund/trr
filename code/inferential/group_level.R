@@ -28,6 +28,9 @@ tasks <- "Stroop"
 mle_output <- "univariate_linear_model.csv"
 bayes_output <- "univariate_bayesian_model.csv"
 
+# Make sure we don't use more cores than available
+stopifnot(n_core_brm <= n_cores)
+
 # Atlas
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
@@ -193,7 +196,7 @@ fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
       return(NA)
     }
   ),
-  mc.cores = min(length(formulas_bayes), ceiling(n_cores / n_core_brm)))
+  mc.cores = min(length(formulas_bayes), n_cores %/% n_core_brm))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 
