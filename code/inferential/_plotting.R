@@ -120,11 +120,13 @@ if (sys.nframe() == 0) {
     norm_tib <- tib %>%
       unite(Term_Grouping, c(Term, Grouping), sep = "|", na.rm = TRUE) %>%
       pivot_wider(id_cols = c(region, Term_Grouping), names_from = Term_Grouping, values_from = Estimate) %>%
-      mutate(`wavewave2_norm|subj` = `wavewave2|subj` / Residual,
+      mutate(
+        `wavewave2_norm|subj` = `wavewave2|subj` / Residual,
         `hilo_allhi_norm|subj` = `hilo_allhi|subj` / Residual,
         Residual_norm = Residual / Data_sd,
         wavewave2_abs_norm = abs(wavewave2) / Data_sd,
-        hilo_allhi_norm = hilo_allhi / Data_sd) %>%
+        hilo_allhi_norm = hilo_allhi / Data_sd
+      ) %>%
       select(region, contains("norm")) %>%
       pivot_longer(!region, names_to = "Term_Grouping", values_to = "Estimate") %>%
       separate(Term_Grouping, c("Term", "Grouping"), sep = "\\|", fill = "right")
@@ -137,21 +139,78 @@ if (sys.nframe() == 0) {
   uv_dat <- prep_dat(here("out", "spatial", uv_brm_fname))
   mv_dat <- prep_dat(here("out", "spatial", mv_brm_fname))
 
-  clim <- c(0, 0.4)
-  f_uv_hilo <- brain_plot(filter(uv_dat, Grouping == "subj"), eff_term = "Term", eff = "hilo_allhi_norm",
+  # Compute the t-statistics (by default all fixed effects including residual)
+  b2t <- function(x, eff = NULL, grp = NA) {
+    if (!is.null(eff)) x <- filter(x, Term %in% .env$eff)
+    if (!is.null(grp)) x <- filter(x, Grouping %in% .env$grp)
+    x %>%
+      filter(!is.na(`Est.Error`)) %>%
+      mutate(tstat = Estimate / `Est.Error`)
+  }
+
+  # Fixed effect of hilo (t-statistics)
+  clim <- c(-8.5, 8.5)
+  f1 <- brain_plot(b2t(uv_dat, "hilo_allhi"), lim = clim, fig_title = "univariate")
+  f2 <- brain_plot(b2t(mv_dat, "hilo_allhi"), lim = clim, fig_title = "multivariate")
+  f1 + f2 + plot_annotation(
+    title = "t statistics for the fixed effect of hi-lo in Stroop baseline")
+  ggsave(here("out", "spatial", "hilo_fixed_t.png"))
+
+  # Fixed effect of wave (t-statistics)
+  clim <- c(0, 2.6)
+  f1 <- brain_plot(mutate(b2t(uv_dat, "wavewave2"), tstat = abs(tstat)), lim = clim, fig_title = "univariate")
+  f2 <- brain_plot(mutate(b2t(mv_dat, "wavewave2"), tstat = abs(tstat)), lim = clim, fig_title = "multivariate")
+  f1 + f2 + plot_annotation(
+    title = "Magnitude of t statistics for the fixed effect of wave in Stroop baseline")
+  ggsave(here("out", "spatial", "wave_fixed_t_abs.png"))
+
+  # Trial-level error relative to the scale of uni- or multi-variate statistics
+  clim <- c(0.97, 1.01)
+  f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "Residual_norm"),
     stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f_mv_hilo <- brain_plot(filter(mv_dat, Grouping == "subj"), eff_term = "Term", eff = "hilo_allhi_norm",
+  f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "Residual_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
+  f1 + f2 + plot_annotation(
+    title = "Trial-level error relative to the scale of the input sd(y) in Stroop baseline")
+  ggsave(here("out", "spatial", "error_norm.png"))
+
+  # Magnitude of the fixed effect of hi-lo contrast relative to the input scale
+  clim <- c(-0.5, 0.5)
+  f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "hilo_allhi_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "univariate")
+  f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "hilo_allhi_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
+  f1 + f2 + plot_annotation(
+    title = "Fixed effect of hi-lo relative to the scale of the input sd(y) in Stroop baseline")
+  ggsave(here("out", "spatial", "hilo_fixed_norm.png"))
+
+  # Magnitude of the fixed effect of wave relative to the input scale
+  clim <- c(0, 0.11)
+  f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "wavewave2_abs_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "univariate")
+  f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "wavewave2_abs_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
+  f1 + f2 + plot_annotation(
+    title = "Magnitude of the fixed effect of wave relative to the scale of the input sd(y) in Stroop baseline")
+  ggsave(here("out", "spatial", "wave_fixed_norm.png"))
+
+  # Random effect of hilo relative to trial-level error (the residual)
+  clim <- c(0, 0.35)
+  f_uv_hilo <- brain_plot(filter(uv_dat, Grouping == "subj", Term == "hilo_allhi_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "univariate")
+  f_mv_hilo <- brain_plot(filter(mv_dat, Grouping == "subj", Term == "hilo_allhi_norm"),
     stat_term = "Estimate", lim = clim, fig_title = "multivariate")
   f_uv_hilo + f_mv_hilo + plot_annotation(
     title = "Effect of (hi_lo|subj) relative to trial-level error in Stroop baseline")
-  ggsave(here("out", "spatial", "hilo.png"))
+  ggsave(here("out", "spatial", "hilo_norm.png"))
 
-  clim <- c(0, 0.07)
-  f_uv_trr <- brain_plot(filter(uv_dat, is.na(Grouping)), eff_term = "Term", eff = "wavewave2_abs_norm",
+  # Random effect of wave relative to trial-level error (the residual)
+  clim <- c(0, 0.11)
+  f_uv_wave <- brain_plot(filter(uv_dat, Grouping == "subj", Term == "wavewave2_norm"),
     stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f_mv_trr <- brain_plot(filter(mv_dat, is.na(Grouping)), eff_term = "Term", eff = "wavewave2_abs_norm",
+  f_mv_wave <- brain_plot(filter(mv_dat, Grouping == "subj", Term == "wavewave2_norm"),
     stat_term = "Estimate", lim = clim, fig_title = "multivariate")
-  f_uv_trr + f_mv_trr + plot_annotation(
-    title = "Magnitude of the fixed effect of wave / magnitude of input sd(y) in Stroop baseline")
-  ggsave(here("out", "spatial", "wave.png"))
+  f_uv_wave + f_mv_wave + plot_annotation(
+    title = "Effect of (wave|subj) relative to trial-level error in Stroop baseline")
+  ggsave(here("out", "spatial", "wave_norm.png"))
 }
