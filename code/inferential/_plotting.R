@@ -125,7 +125,7 @@ if (sys.nframe() == 0) {
         `hilo_allhi_norm|subj` = `hilo_allhi|subj` / Residual,
         Residual_norm = Residual / Data_sd,
         wavewave2_abs_norm = abs(wavewave2) / Data_sd,
-        hilo_allhi_norm = hilo_allhi / Data_sd
+        hilo_allhi_norm = abs(hilo_allhi) / Data_sd
       ) %>%
       select(region, contains("norm")) %>%
       pivot_longer(!region, names_to = "Term_Grouping", values_to = "Estimate") %>%
@@ -149,7 +149,7 @@ if (sys.nframe() == 0) {
   }
 
   # Fixed effect of hilo (t-statistics)
-  clim <- c(-8.5, 8.5)
+  clim <- NULL  # Different scale, since mv's main effect should be generally >= 0
   f1 <- brain_plot(b2t(uv_dat, "hilo_allhi"), lim = clim, fig_title = "univariate")
   f2 <- brain_plot(b2t(mv_dat, "hilo_allhi"), lim = clim, fig_title = "multivariate")
   f1 + f2 + plot_annotation(
@@ -175,7 +175,7 @@ if (sys.nframe() == 0) {
   ggsave(here("out", "spatial", "error_norm.png"))
 
   # Magnitude of the fixed effect of hi-lo contrast relative to the input scale
-  clim <- c(-0.5, 0.5)
+  clim <- c(0, 0.5)
   f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "hilo_allhi_norm"),
     stat_term = "Estimate", lim = clim, fig_title = "univariate")
   f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "hilo_allhi_norm"),
