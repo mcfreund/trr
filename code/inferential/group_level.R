@@ -8,10 +8,11 @@ library(doParallel)
 library(foreach)
 library(lme4)
 library(brms)
+library(ggsegSchaefer)
 
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
-source(here("code", "inferential", "_plotting.R"))
+# source(here("code", "inferential", "_plotting.R"))
 
 
 ########################### Constants ###########################
@@ -26,7 +27,7 @@ waves <- waves[do_waves]
 n_cores <- 20
 tasks <- "Stroop"
 mle_output <- "univariate_linear_model.csv"
-bayes_output <- "univariate_bayesian_model.csv"
+bayes_output <- "uv_bayes_MCMC_coefs.rds"
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
@@ -140,31 +141,39 @@ d_sum_group <- d_sum_group %>%
 
 ################ Prepare data for hierarchical linear modeling ############
 
-# ensure intercept is coded as 'lo'
-d$hilo_all <- factor(d$hilo_all, levels = c("lo", "hi"))
-
 # Select part of the ROIs
 if (n_roi_used > 0) {
   rois <- rois[1:n_roi_used]
 }
 
+d <- as_tibble(d[d$session == "baseline",]) %>%
+  mutate(hilo_all = factor(hilo_all, c("lo", "hi"), ordered = TRUE),
+    wave = factor(wave, c("wave1", "wave2"), ordered = TRUE)) %>%
+  mutate(hiloc = ifelse(hilo_all == "hi", 0.5, -0.5)) %>%
+  mutate(hiloc1 = hiloc * (wave == "wave1"), hiloc2 = hiloc * (wave == "wave2"),
+    w1_vs_mw1 = ifelse(wave == "wave1", 1, 0), w2_vs_mw2 = ifelse(wave == "wave2", 1, 0)) %>%
+  select(!hiloc)
+
+# Set contrasts as the difference between two levels (twice the difference between level 2 and the mean)
+contrasts(d$wave) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("wave1", "wave2"), "w2_vs_w1"))
+contrasts(d$hilo_all) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("lo", "hi"), "hi_vs_lo"))
+d
+
 
 ############################### lme4 modeling ##############################
 
-# fit model to single ROI:
-fit_full <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave * hilo_all + (wave * hilo_all | subj),
-  d[session == "baseline"])
-summary(fit_full)
-fit_reduced <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave + hilo_all + (wave + hilo_all | subj),
-  d[session == "baseline"])
-fit_nowave <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ hilo_all + (hilo_all | subj),
-  d[session == "baseline"])
-anova(fit_nowave, fit_reduced, fit_full)
+# # fit model to single ROI:
+# fit_full <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave * hilo_all + (wave * hilo_all | subj), d)
+# summary(fit_full)
+# fit_reduced <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ wave + hilo_all + (wave + hilo_all | subj), d)
+# fit_nowave <- lmer(`17Networks_LH_VisCent_ExStr_1` ~ hilo_all + (hilo_all | subj), d)
+# anova(fit_nowave, fit_reduced, fit_full)
 
 
 # fit all models
-formulas <- paste0("`", rois, "` ~ wave + hilo_all + (wave + hilo_all | subj)")
-fits <- mclapply(formulas, function(x) lmer(as.formula(x), d[session == "baseline"]), mc.cores = n_cores)
+formulas <- paste0("`", rois, "` ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+  " + (0 + hiloc1 + hiloc2 | subj)")
+fits <- mclapply(formulas, function(x) lmer(as.formula(x), d), mc.cores = n_cores)
 names(fits) <- rois
 b <- rbindlist(lapply(fits, pull_fixef), idcol = "region")
 
@@ -175,18 +184,22 @@ write.csv(b, here("out", "spatial", mle_output))
 ############################# Fit Bayesian model #########################
 
 # Fix naming problems with brms() formulas
-input_for_bayes <- as_tibble(d[session == "baseline"]) %>%
+input_for_bayes <- d %>%
   filter(if_all(starts_with("17Networks"), ~ !is.na(.x))) %>%
   setNames(gsub("17Networks", "Networks", names(.)))
 rois_bayes <- gsub("17Networks", "Networks", rois)
 
 # Fit a Bayesian model
-bayes_model <- as.formula(paste0("`", rois_bayes[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
+bayes_model <- as.formula(paste0(rois_bayes[[1]],
+  " ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+  " + (0 + hiloc1 + hiloc2 | subj)"))
 get_prior(bayes_model, input_for_bayes)
 fit_bayes <- brm(bayes_model, input_for_bayes, cores = n_core_brm)
 
 # Fit all models
-formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
+formulas_bayes <- paste0(rois_bayes,
+  " ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+  " + (0 + hiloc1 + hiloc2 | subj)")
 fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
     brm(as.formula(x), input_for_bayes, cores = n_core_brm),
     error = function(e) {
@@ -198,7 +211,11 @@ fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
   ),
   mc.cores = min(length(formulas_bayes), n_cores %/% n_core_brm))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
-b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 
-# Saving
-write.csv(b_bayes, here("out", "spatial", bayes_output))
+# # Save the summary of coefficients
+# b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
+# write.csv(b_bayes, here("out", "spatial", bayes_output))
+
+# Save the coefficients from all MCMC draws
+b_bayes <- lapply(fits_bayes, as.data.frame)
+saveRDS(b_bayes, here("out", "spatial", bayes_output))

@@ -9,10 +9,11 @@ library(doParallel)
 library(foreach)
 library(lme4)
 library(brms)
+library(ggsegSchaefer)
 
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
-source(here("code", "inferential", "_plotting.R"))
+# source(here("code", "inferential", "_plotting.R"))
 
 
 ########################## Constants ##############################
@@ -26,7 +27,7 @@ tasks <- "Stroop"
 sessions <- "baseline"
 fname <- "projections__stroop__rda_lambda_100__n_resamples100.csv"
 mle_output <- "multivariate_linear_model.csv"
-bayes_output <- "multivariate_bayesian_model.csv"
+bayes_output <- "mv_bayes_MCMC_coefs.rds"
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
@@ -96,7 +97,7 @@ pull_bayes_ef <- function(mdl) {
     vec2sum(hilo_subj, term_name = "hilo_allhi_norm", group_name = "subj"),
     vec2sum(wave_subj, term_name = "wavewave2_norm", group_name = "subj")
   )
-  
+
   # Normalized fixed effects abs(wave)/data, error/data
   hilo_norm <- coefs[, grep("^b_hilo*", names(coefs))] / res_dat$Estimate
   wave_norm <- coefs[, grep("^b_wave*", names(coefs))] / res_dat$Estimate
@@ -127,26 +128,45 @@ mv_proj_wide <- mv_proj %>%
   filter(roi %in% .env$rois) %>%
   pivot_wider(id_cols = c(trial, subj, task, wave, variable),
     names_from = roi, values_from = value) %>%
-  rename(hilo_all = variable)
+  rename(hilo_all = variable) %>%
+  mutate(hilo_all = factor(hilo_all, c("lo", "hi"), ordered = TRUE),
+    wave = factor(wave, c("wave1", "wave2"), ordered = TRUE)) %>%
+  mutate(hiloc = ifelse(hilo_all == "hi", 0.5, -0.5)) %>%
+  mutate(hiloc1 = hiloc * (wave == "wave1"), hiloc2 = hiloc * (wave == "wave2"),
+    w1_vs_mw1 = ifelse(wave == "wave1", 1, 0), w2_vs_mw2 = ifelse(wave == "wave2", 1, 0)) %>%
+  select(!hiloc)
+
+# Set contrasts as the difference between two levels (twice the difference between level 2 and the mean)
+contrasts(mv_proj_wide$wave) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("wave1", "wave2"), "w2_vs_w1"))
+contrasts(mv_proj_wide$hilo_all) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("lo", "hi"), "hi_vs_lo"))
 mv_proj_wide
 
 
 ################### Fit lme4 models #######################
 
-# Single ROI
-nowave_model <- as.formula(paste0("`", rois[[1]], "` ~ hilo_all + (hilo_all | subj)"))
-reduced_model <- as.formula(paste0("`", rois[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
-full_model <- as.formula(paste0("`", rois[[1]], "` ~ wave * hilo_all + (wave * hilo_all | subj)"))
+# # Debugging
+# model0 <- as.formula(paste0("`", rois[[1]], "` ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+#   " + (0 + hiloc1 + hiloc2 | subj)"))
+# mdl <- lmer(model0, mv_proj_wide)
+# summary(mdl)
+# coef(mdl)
 
-fit_nowave <- lmer(nowave_model, mv_proj_wide)
-fit_reduced <- lmer(reduced_model, mv_proj_wide)
-fit_full <- lmer(full_model, mv_proj_wide)
+# # Single ROI
+# nowave_model <- as.formula(paste0("`", rois[[1]], "` ~ hilo_all + (hilo_all | subj)"))
+# reduced_model <- as.formula(paste0("`", rois[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
+# full_model <- as.formula(paste0("`", rois[[1]], "` ~ wave * hilo_all + (0 + wave | subj)",
+#   " + (0 + hilo_all | subj) + (0 + wave : hilo_all | subj)"))
 
-summary(fit_full)
-anova(fit_nowave, fit_reduced, fit_full)
+# fit_nowave <- lmer(nowave_model, mv_proj_wide)
+# fit_reduced <- lmer(reduced_model, mv_proj_wide)
+# fit_full <- lmer(full_model, mv_proj_wide)
+
+# summary(fit_full)
+# anova(fit_nowave, fit_reduced, fit_full)
 
 # fit many models (all ROIs)
-formulas <- paste0("`", rois, "` ~ wave + hilo_all + (wave + hilo_all | subj)")
+formulas <- paste0("`", rois, "` ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+  " + (0 + hiloc1 + hiloc2 | subj)")
 fits <- mclapply(formulas, function(x) lmer(as.formula(x), mv_proj_wide), mc.cores = n_cores)
 names(fits) <- rois
 b <- rbindlist(lapply(fits, pull_fixef), idcol = "region")
@@ -155,7 +175,7 @@ b <- rbindlist(lapply(fits, pull_fixef), idcol = "region")
 write.csv(b, here("out", "spatial", mle_output))
 
 # # Plotting
-# tmp <- brain_plot(b, eff_term = "term", eff = "hilo_alllo", lim = c(-12, 3), direct = -1,
+# tmp <- brain_plot(b, eff_term = "term", eff = "hilo_allhi_vs_lo", lim = NULL,
 #   fig_title = "t-statistics for hi-lo, multivariate method, stroop, baseline")
 # print(tmp)
 
@@ -168,12 +188,16 @@ input_for_bayes <- mv_proj_wide %>%
 rois_bayes <- gsub("17Networks", "Networks", rois)
 
 # Fit a Bayesian model
-bayes_model <- as.formula(paste0("`", rois_bayes[[1]], "` ~ wave + hilo_all + (wave + hilo_all | subj)"))
+bayes_model <- as.formula(paste0(rois_bayes[[1]],
+  " ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+  " + (0 + hiloc1 + hiloc2 | subj)"))
 get_prior(bayes_model, input_for_bayes)
 fit_bayes <- brm(bayes_model, input_for_bayes, cores = n_core_brm)
 
 # Fit all models
-formulas_bayes <- paste0(rois_bayes, " ~ wave + hilo_all + (wave + hilo_all | subj)")
+formulas_bayes <- paste0(rois_bayes,
+  " ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+  " + (0 + hiloc1 + hiloc2 | subj)")
 fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
     brm(as.formula(x), input_for_bayes, cores = n_core_brm),
     error = function(e) {
@@ -185,7 +209,11 @@ fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
   ),
   mc.cores = min(length(formulas_bayes), n_cores %/% n_core_brm))
 names(fits_bayes) <- rois  # Note: need to get back the "17" now!
-b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
 
-# Saving
-write.csv(b_bayes, here("out", "spatial", bayes_output))
+# # Save the summary of coefficients
+# b_bayes <- bind_rows(lapply(fits_bayes, pull_bayes_ef), .id = "region")
+# write.csv(b_bayes, here("out", "spatial", bayes_output))
+
+# Save the coefficients from all MCMC draws
+b_bayes <- lapply(fits_bayes, as.data.frame)
+saveRDS(b_bayes, here("out", "spatial", bayes_output))
