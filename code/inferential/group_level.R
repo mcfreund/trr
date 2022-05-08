@@ -203,9 +203,9 @@ formulas_bayes <- paste0(rois_bayes,
 fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
     brm(as.formula(x), input_for_bayes, cores = n_core_brm),
     error = function(e) {
-      print()
+      print("")
       print(e)
-      print()
+      print("")
       return(NA)
     }
   ),
@@ -217,5 +217,7 @@ names(fits_bayes) <- rois  # Note: need to get back the "17" now!
 # write.csv(b_bayes, here("out", "spatial", bayes_output))
 
 # Save the coefficients from all MCMC draws
-b_bayes <- lapply(fits_bayes, as.data.frame)
+# Note: there is a bug of lapply() when using dataframes so we use a bypass
+b_bayes <- lapply(fits_bayes, function(x) ifelse(class(x) == "brmsfit", list(as.data.frame(x)), list(NA)))
+b_bayes <- lapply(b_bayes, function(x) x[[1]])
 saveRDS(b_bayes, here("out", "spatial", bayes_output))
