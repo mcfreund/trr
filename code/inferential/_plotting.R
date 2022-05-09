@@ -60,8 +60,10 @@ if (sys.nframe() == 0) {
   library(mfutils)
 
   # Data
-  mv_brm_fname <- "multivariate_bayesian_model.csv"
+  mv_brm_fname <- "multivariate_bayesian_model.csv"  # Effects extracted by pull_bayes_ef()
   uv_brm_fname <- "univariate_bayesian_model.csv"
+  mv_mcmc <- "mv_bayes_MCMC_coefs.rds"  # Coefficients from every MCMC sample
+  uv_mcmc <- "uv1_bayes_MCMC_coefs.rds"
 
   # ROIs
   atlas_nm <- "schaefer2018_17_400_fsaverage5"
@@ -102,7 +104,71 @@ if (sys.nframe() == 0) {
 
   ############################ brms effects #################################
 
-  prep_dat <- function(fpath) {
+  # Summarize sampling statistics
+  vec2sum <- function(dat, term_name = NA, group_name = NA, alpha = .05) {
+    ci <- c(alpha / 2, 1 - alpha / 2)
+    as_tibble(list(Term = term_name, Grouping = group_name,
+      Estimate = mean(dat), `Est.Error` = sd(dat), tstat = mean(dat) / sd(dat),
+      CI_L = quantile(dat, probs = ci[[1]]),
+      CI_U = quantile(dat, probs = ci[[2]])))
+  }
+
+  # Preprocess the MCMC coefficients saved in .rds file
+  prep_dat_rds <- function(fpath) {
+
+    # Read file, drop the failed models and uninteresting coefficients
+    samples <- readRDS(fpath)
+    samples <- samples[!is.na(samples)]
+    samples <- lapply(samples, function(x) x[, !grepl("^r_subj|^lp__", names(x))])
+
+    # Summarize the estimations
+    new_samples <- lapply(samples, function(x) {
+
+      # Calculate some "effect sizes" by mutate()
+      x <- as_tibble(x) %>%
+        mutate(
+          hiloc1_subj_norm = sd_subj__hiloc1 / sigma,
+          hiloc2_subj_norm = sd_subj__hiloc2 / sigma
+        )
+
+      # Summarizing
+      bind_rows(lapply(as.list(x), vec2sum), .id = "Term") %>%
+        mutate(Grouping = ifelse(grepl("subj", Term), "subj", NA))
+
+    })
+
+    # Bind into a large tibble
+    bind_rows(new_samples, .id = "region")
+  }
+  uv_mdl <- prep_dat_rds(here("out", "spatial", uv_mcmc))
+  mv_mdl <- prep_dat_rds(here("out", "spatial", mv_mcmc))
+
+  # Random effect of hilo relative to trial-level error (the residual)
+  clim <- c(0, 0.5)
+  f_uv_hilo1 <- brain_plot(filter(uv_mdl, Term == "hiloc1_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "univariate, wave1")
+  f_mv_hilo1 <- brain_plot(filter(mv_mdl, Term == "hiloc1_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "multivariate, wave1")
+  f_uv_hilo2 <- brain_plot(filter(uv_mdl, Term == "hiloc2_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "univariate, wave2")
+  f_mv_hilo2 <- brain_plot(filter(mv_mdl, Term == "hiloc2_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "multivariate, wave2")
+  (f_uv_hilo1 + f_mv_hilo1) / (f_uv_hilo2 + f_mv_hilo2) + plot_annotation(
+    title = "Effect of (hi_lo|subj) relative to trial-level error in Stroop baseline")
+  ggsave(here("out", "spatial", "hilo_norm.png"))
+
+  # Test-retest reliability
+  clim <- c(-1, 1)
+  f_uv_trr <- brain_plot(filter(uv_mdl, Term == "cor_subj__hiloc1__hiloc2"),
+    stat_term = "Estimate", lim = clim, fig_title = "univariate")
+  f_mv_trr <- brain_plot(filter(mv_mdl, Term == "cor_subj__hiloc1__hiloc2"),
+    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
+  f_uv_trr + f_mv_trr + plot_annotation(
+    title = "Test-retest correlation of hi-lo contrast in Stroop baseline")
+  ggsave(here("out", "spatial", "hilo_trr.png"))
+
+  # Preprocess the effects saved in a csv by pull_bayes_ef in the training code
+  prep_dat_csv <- function(fpath) {
 
     tib <- read_csv(fpath) %>%
       select(!`...1`)
@@ -136,8 +202,8 @@ if (sys.nframe() == 0) {
 
     return(tib)
   }
-  uv_dat <- prep_dat(here("out", "spatial", uv_brm_fname))
-  mv_dat <- prep_dat(here("out", "spatial", mv_brm_fname))
+  uv_dat <- prep_dat_csv(here("out", "spatial", uv_brm_fname))
+  mv_dat <- prep_dat_csv(here("out", "spatial", mv_brm_fname))
 
   # Compute the t-statistics (by default all fixed effects including residual)
   b2t <- function(x, eff = NULL, grp = NA) {

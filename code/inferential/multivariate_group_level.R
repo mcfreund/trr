@@ -201,9 +201,10 @@ formulas_bayes <- paste0(rois_bayes,
 fits_bayes <- mclapply(formulas_bayes, function(x) tryCatch(
     brm(as.formula(x), input_for_bayes, cores = n_core_brm),
     error = function(e) {
-      print("")
+      print("------------------------")
+      print("ERROR:")
       print(e)
-      print("")
+      print("------------------------")
       return(NA)
     }
   ),
