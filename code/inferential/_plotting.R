@@ -63,7 +63,7 @@ if (sys.nframe() == 0) {
   mv_brm_fname <- "multivariate_bayesian_model.csv"  # Effects extracted by pull_bayes_ef()
   uv_brm_fname <- "univariate_bayesian_model.csv"
   mv_mcmc <- "mv_bayes_MCMC_coefs.rds"  # Coefficients from every MCMC sample
-  uv_mcmc <- "uv1_bayes_MCMC_coefs.rds"
+  uv_mcmc <- "uv_bayes_MCMC_coefs.rds"
 
   # ROIs
   atlas_nm <- "schaefer2018_17_400_fsaverage5"
