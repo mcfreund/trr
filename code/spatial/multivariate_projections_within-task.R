@@ -6,6 +6,7 @@ library(doParallel)
 library(foreach)
 library(mfutils)
 library(mda)
+library(sparsediscrim)
 library(pROC)
 
 source(here("code", "_constants.R"))
@@ -19,14 +20,15 @@ classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
 train <- c("proactive", "reactive")
 test <- c("baseline")
-shrinkage_factor <- 100
+classifier <- "schafer_full"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda" (using mda::fda())
+shrinkage_factor <- 100  # Only used for "fda" classfier
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
 subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 do_waves <- c(1, 2)
-n_cores <- 28
+n_cores <- 20
 n_resamples <- 100
 
 
@@ -53,7 +55,7 @@ behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_alltasks.cs
 cols <- c("subj", "wave", "task", "session", "trialtype", variable, "trialnum")
 behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols]
 
-## for dev/interactive use:
+# # for dev/interactive use:
 # subj_i <- 3
 # task_i <- 1
 # wave_i <- 1
@@ -138,6 +140,9 @@ allres <-
     projs <- enlist(rois)
     for (roi_i in seq_along(rois)) {
 
+      print(paste("Now processing", task_val, "task for subject", subj_val, wave_val,
+        "in region", roi_i, ":", rois[[roi_i]]))
+
       ## extract roi_i for each session
       data_clean_roi <- lapply(data_clean_rois, "[[", rois[roi_i])  ## list of matrices of vertex by trial
 
@@ -151,19 +156,38 @@ allres <-
       d_test <- t(do.call(cbind, data_clean_roi_goodverts[test]))
       d_train <- t(do.call(cbind, data_clean_roi_goodverts[train]))
 
+      ## Add column names to data for lda_schafer()
+      colnames(d_test) <- paste0("v", seq_len(ncol(d_test)))
+      colnames(d_train) <- paste0("v", seq_len(ncol(d_train)))
+
       ## train
       fits <- lapply(
         seq_len(nrow(resampled_idx)),
         function(resample_i) {
           .idx <- resampled_idx[resample_i, ]
-          fda(y_train ~ d_train[.idx, ], method = gen.ridge, lambda = shrinkage_factor)
+          if (classifier == "schafer_full") {
+            return(lda_schafer(d_train[.idx, ], y_train))
+          } else if (classifier == "schafer_diag") {
+            return(lda_schafer(d_train[.idx, ], y_train, lambda = 1))
+          } else {
+            return(fda(y_train ~ d_train[.idx, ], method = gen.ridge, lambda = shrinkage_factor))
+          }
         }
         #mc.cores = n_cores
       )
       ## test
       projs_i <- vapply(
         fits,
-        function(.x, .newdata) predict(.x, newdata = .newdata, type = "variates"),
+        function(.x, .newdata) if (grep("^schafer", classifier)) {
+          tmp <- predict(.x, newdata = .newdata, type = "score")
+          # Note: the implementation of predict.lda_schafer seems wrong so we need to change the value
+          for (curr in names(tmp)) {
+            tmp[curr] <- -0.5 * (tmp[curr] - log(.x$est[[curr]]$prior)) + log(.x$est[[curr]]$prior)
+          }
+          return(as.numeric(t(tmp[classes[[2]]] - tmp[classes[[1]]])))
+        } else {
+          return(predict(.x, newdata = .newdata, type = "variates"))
+        },
         numeric(nrow(d_test)),
         .newdata = d_test
       )
@@ -186,5 +210,8 @@ allres <-
 }
 stopCluster(cl)
 
-fname <- paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
+fname <- ifelse(grep("^schafer", classifier),
+  paste0("projections__stroop__", classifier, "__n_resamples", n_resamples, ".csv"),
+  paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
+)
 fwrite(allres, here("out", "spatial", fname))

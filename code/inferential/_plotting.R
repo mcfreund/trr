@@ -158,7 +158,7 @@ if (sys.nframe() == 0) {
   ggsave(here("out", "spatial", "hilo_norm.png"))
 
   # Test-retest reliability
-  clim <- c(-1, 1)
+  clim <- c(-0.6, 1)
   f_uv_trr <- brain_plot(filter(uv_mdl, Term == "cor_subj__hiloc1__hiloc2"),
     stat_term = "Estimate", lim = clim, fig_title = "univariate")
   f_mv_trr <- brain_plot(filter(mv_mdl, Term == "cor_subj__hiloc1__hiloc2"),
