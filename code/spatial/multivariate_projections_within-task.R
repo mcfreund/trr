@@ -179,12 +179,8 @@ allres <-
       projs_i <- vapply(
         fits,
         function(.x, .newdata) if (grep("^schafer", classifier)) {
-          tmp <- predict(.x, newdata = .newdata, type = "score")
-          # Note: the implementation of predict.lda_schafer seems wrong so we need to change the value
-          for (curr in names(tmp)) {
-            tmp[curr] <- -0.5 * (tmp[curr] - log(.x$est[[curr]]$prior)) + log(.x$est[[curr]]$prior)
-          }
-          return(as.numeric(t(tmp[classes[[2]]] - tmp[classes[[1]]])))
+          tmp <- predict(.x, newdata = .newdata, type = "prob")  # Note: using "score" seems to be wrong
+          return(as.numeric(t(log(tmp[classes[[2]]] / tmp[classes[[1]]]))))
         } else {
           return(predict(.x, newdata = .newdata, type = "variates"))
         },
