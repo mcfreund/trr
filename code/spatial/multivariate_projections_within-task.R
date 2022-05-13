@@ -20,7 +20,7 @@ classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
 train <- c("proactive", "reactive")
 test <- c("baseline")
-classifier <- "schafer_full"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda" (using mda::fda())
+classifier <- "schafer_diag"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda" (using mda::fda())
 shrinkage_factor <- 100  # Only used for "fda" classfier
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
@@ -28,7 +28,7 @@ subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 do_waves <- c(1, 2)
-n_cores <- 20
+n_cores <- 12
 n_resamples <- 100
 
 
@@ -62,12 +62,14 @@ behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols
 # session_i <- 1
 # roi_i <- 1
 
-cl <- makeCluster(n_cores, type = "FORK")
+cl <- makeCluster(n_cores, type = "FORK", outfile = "")
 registerDoParallel(cl)
 allres <-
   foreach(task_i = seq_along(tasks), .inorder = FALSE, .combine = "rbind") %:%
   foreach(subj_i = seq_along(subjs), .inorder = FALSE, .combine = "rbind") %:%
   foreach(wave_i = seq_along(waves), .inorder = FALSE, .combine = "rbind") %dopar% {
+
+    tryCatch({
 
     task_val <- tasks[task_i]
     subj_val <- subjs[subj_i]
@@ -180,7 +182,7 @@ allres <-
         fits,
         function(.x, .newdata) if (grep("^schafer", classifier)) {
           tmp <- predict(.x, newdata = .newdata, type = "prob")  # Note: using "score" seems to be wrong
-          return(as.numeric(t(log(tmp[classes[[2]]] / tmp[classes[[1]]]))))
+          return(as.numeric(t(log(tmp[classes[[2]]] + 1e-6) - log(tmp[classes[[1]]] + 1e-6))))
         } else {
           return(predict(.x, newdata = .newdata, type = "variates"))
         },
@@ -203,7 +205,13 @@ allres <-
 
     res  ## return
 
-}
+    }, error = function(e) {
+      print("")
+      print(e)
+      print("")
+      return(NA)
+    })
+  }
 stopCluster(cl)
 
 fname <- ifelse(grep("^schafer", classifier),

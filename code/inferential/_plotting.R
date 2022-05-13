@@ -7,6 +7,20 @@ library(ggseg)
 library(ggsegExtra)
 library(ggsegSchaefer)
 library(ggsegGlasser)
+library(mfutils)
+
+# ROIs
+atlas_nm <- "schaefer2018_17_400_fsaverage5"
+roi_col <- "parcel"  ## "parcel" or "network"
+
+# Atlas
+if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
+  rois <- get(atlas_nm)$key[[roi_col]]
+  atlas <- schaefer17_400
+  atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
+} else {
+  stop("not configured for atlas")
+}
 
 # Theme
 theme_set(theme_bw(base_size = 12))
@@ -20,6 +34,7 @@ theme_surface <- list(
 )
 
 # Plotting function
+# Note: the parcels should be in df$region
 brain_plot <- function(df, eff_term = NULL, eff = NULL, stat_term = "tstat",
                     lim = NULL, direct = 1, fig_title = "Example figure", savename = NULL) {
   if (!is.null(eff_term)) {
@@ -57,26 +72,12 @@ if (sys.nframe() == 0) {
 
   library(here)
   library(readr)
-  library(mfutils)
 
   # Data
   mv_brm_fname <- "multivariate_bayesian_model.csv"  # Effects extracted by pull_bayes_ef()
   uv_brm_fname <- "univariate_bayesian_model.csv"
   mv_mcmc <- "mv_bayes_MCMC_coefs.rds"  # Coefficients from every MCMC sample
   uv_mcmc <- "uv_bayes_MCMC_coefs.rds"
-
-  # ROIs
-  atlas_nm <- "schaefer2018_17_400_fsaverage5"
-  roi_col <- "parcel"  ## "parcel" or "network"
-
-  # Atlas
-  if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
-    rois <- get(atlas_nm)$key[[roi_col]]
-    atlas <- schaefer17_400
-    atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
-  } else {
-    stop("not configured for atlas")
-  }
 
 
   ############################ lme4 Results #################################
