@@ -1,3 +1,28 @@
+# Compute trial-level multivariate statistics
+#
+# Author: Michael Freund
+#
+# 05/13/2022 updated by Ruiqi Chen:
+#
+# This script trains a linear classifier for each subject * task * region using the
+# proactive & reactive sessions as training set and tests it on the baseline session.
+# The value predicted for each trial is saved along with the classifier's AUC.
+#
+# The variable `classifier` specifies the type of classifier to use. "fda" will use
+# the `fda()` function from the `mda` package for shrinkage-based LDA. "schafer_full"
+# uses the `lda_schafer()` function from package `sparsediscrim` for LDA, where the
+# covariance matrix is estimated by the method in Schafer and Strimmer (2005).
+# "schafer_diag" also uses `lda_schafer()` but with parameter `lambda = 1` so that
+# the off-diagonal elements of the estimated covariance matrix are forced to be 0.
+#
+# For "fda" classifier, the obtained statistic is the prediction for "variates";
+# for "schafer_full" and "schafer_diag", the statistic is the log of the ratio
+# between predicted posterior probability for high control over low control trial
+# type for each trial in the baseline condition.
+#
+# To-do: the training returns a few NAs for "schafer_full" and "schafer_diag" and
+# the reason is not clear yet.
+
 library(here)
 library(dplyr)
 library(data.table)
@@ -20,7 +45,7 @@ classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
 train <- c("proactive", "reactive")
 test <- c("baseline")
-classifier <- "schafer_diag"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda" (using mda::fda())
+classifier <- "schafer_diag"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda"
 shrinkage_factor <- 100  # Only used for "fda" classfier
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
@@ -30,6 +55,11 @@ resid_type <- "errts"
 do_waves <- c(1, 2)
 n_cores <- 12
 n_resamples <- 100
+
+fname <- ifelse(grep("^schafer", classifier),
+  paste0("projections__stroop__", classifier, "__n_resamples", n_resamples, ".csv"),
+  paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
+)  # Output filename (under ./out/spatial/)
 
 
 ## execute ----
@@ -214,8 +244,4 @@ allres <-
   }
 stopCluster(cl)
 
-fname <- ifelse(grep("^schafer", classifier),
-  paste0("projections__stroop__", classifier, "__n_resamples", n_resamples, ".csv"),
-  paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
-)
 fwrite(allres, here("out", "spatial", fname))

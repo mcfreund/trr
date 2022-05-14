@@ -1,3 +1,13 @@
+# Hierarchical modeling for the univariate statistics
+#
+# Author: Michael Freund
+#
+# 05/13/2022 updated by Ruiqi Chen:
+#
+# This script builds the hierarhical model for the univariate statistics.
+# Please refer to the comments in "multivariate_group_level.R" for the
+# details, as the modeling codes in these two scripts are almost the same.
+
 library(here)
 library(tidyr)
 library(dplyr)

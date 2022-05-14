@@ -1,15 +1,47 @@
+# Hierarchical modeling for the statistics obtained through multivariate method
+#
+# Author: Ruiqi Chen
+#
+# This script reads in the statistics and builds a hierarchical model for it.
+# Note that currently the contrasts are set as (-0.5, 0.5) for ("lo", "hi") and
+# (-0.5, 0.5) for ("wave1", "wave2"), so the fixed effect represents the difference
+# between "hi" - "lo" or "wave2" - "wave1".
+#
+# We train the model using both maximum-likelihood method (via package `lme4`)
+# and Bayesian MCMC method (via package `brms`). The `lme4` models mostly can't
+# converge so we mainly use the results from `brms`. Note that the MCMC is very slow
+# (~10h with 20 cores) and the parallelization often causes some jobs to fail.
+# You need to check `is.na(fits_bayes)` and re-train the models that fail, which
+# typically all finish in the second run.
+#
+# We save the fixed effects from the `lme4` models in a .csv file. For `brms` model,
+# there are two ways:
+#
+# 1. Extract the effects of interest from the models by the function `pull_bayes_ef()`
+#   in the script. Currently this function will save the point estimate, estimation
+#   error, 2.5 and 97.5 percentile of the following "effects":
+#  - all fixed effects (slope)
+#  - all random effects & the error (standard deviation)
+#  - "normalized" random effect of (hilo|subj)/error and (wave|subj)/error
+#  - "normalized" fixed effect of abs(wave)/sd(y) and error/sd(y), where y is the
+#     response (the input statistics we model).
+# The extracted effects will be saved in a .csv file similar to that for `lme4` models.
+#
+# 2. Save all MCMC samples (with the estimated coefficients from each sample) from all
+#   models as a list of 400 dataframes (of size 4000 * ~90) into an .rds file.
+#
+# The second way uses much more disk space (~1GB) but is more flexible so that you don't
+# need to re-train the models (for ~10h) if you want to use another term that is not
+# calculated by `pull_bayes_ef()`.
+
 library(here)
-library(readr)
-library(tidyr)
-library(dplyr)
-library(data.table)
-library(tibble)
+library(tidyverse)
 library(mfutils)
+library(ggsegSchaefer)
 library(doParallel)
 library(foreach)
 library(lme4)
 library(brms)
-library(ggsegSchaefer)
 
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
@@ -25,9 +57,9 @@ do_waves <- c(1, 2)
 n_cores <- 20
 tasks <- "Stroop"
 sessions <- "baseline"
-fname <- "projections__stroop__rda_lambda_100__n_resamples100.csv"
-mle_output <- "multivariate_linear_model.csv"
-bayes_output <- "mv_bayes_MCMC_coefs.rds"
+fname <- "projections__stroop__schafer_full__n_resamples100.csv"  # Input from ./code/spatial/multi...task.R
+mle_output <- "multivariate_linear_model_schafer_full.csv"
+bayes_output <- "mv_bayes_MCMC_coefs_schafer_full.rds"
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
@@ -164,15 +196,15 @@ mv_proj_wide
 # summary(fit_full)
 # anova(fit_nowave, fit_reduced, fit_full)
 
-# fit many models (all ROIs)
-formulas <- paste0("`", rois, "` ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
-  " + (0 + hiloc1 + hiloc2 | subj)")
-fits <- mclapply(formulas, function(x) lmer(as.formula(x), mv_proj_wide), mc.cores = n_cores)
-names(fits) <- rois
-b <- rbindlist(lapply(fits, pull_fixef), idcol = "region")
+# # fit many models (all ROIs)
+# formulas <- paste0("`", rois, "` ~ wave * hilo_all + (0 + w1_vs_mw1 + w2_vs_mw2 | subj)",
+#   " + (0 + hiloc1 + hiloc2 | subj)")
+# fits <- mclapply(formulas, function(x) lmer(as.formula(x), mv_proj_wide), mc.cores = n_cores)
+# names(fits) <- rois
+# b <- bind_rows(lapply(fits, pull_fixef), .id = "region")
 
-# Saving
-write.csv(b, here("out", "spatial", mle_output))
+# # Saving
+# write.csv(b, here("out", "spatial", mle_output))
 
 # # Plotting
 # tmp <- brain_plot(b, eff_term = "term", eff = "hilo_allhi_vs_lo", lim = NULL,
@@ -184,6 +216,7 @@ write.csv(b, here("out", "spatial", mle_output))
 
 # Fix naming problems with brms() formulas
 input_for_bayes <- mv_proj_wide %>%
+  filter(if_all(starts_with("17Networks"), ~ !is.na(.x))) %>%
   setNames(gsub("17Networks", "Networks", names(.)))
 rois_bayes <- gsub("17Networks", "Networks", rois)
 

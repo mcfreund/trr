@@ -1,3 +1,18 @@
+# Compare the value and AUC for "schafer_full" and "schafer_diag"
+#
+# Author: Ruiqi Chen
+#
+# This is a simple script to compare the predicted value and AUC of "schafer_full" and
+# "schafer_diag" classifiers, i.e., whether the covariances matters. The script computes
+# the correlation between the predicted value from both classifiers for every (subj *
+# wave * region), and plot the grand mean over the subjects for each wave and region.
+# Trials with NA for any classifiers will be discarded before computing correlation.
+#
+# Besides, the script computes the grand mean of AUC over subjects and plot it for each
+# classifier, wave and region.
+#
+# The plotting relies on the brain_plot() function from ./code/inferential/_plotting.R
+
 library(tidyverse)
 library(here)
 

@@ -1,3 +1,18 @@
+# Plotting function & Generate figures
+#
+# Author: Ruiqi Chen
+#
+# When being sourced, this script provides a function `brain_plot()` that can plot
+# some statistics for each parcel over the brain. Please refer to the comments above
+# the definition of `brain_plot()` for its usage.
+#
+# When executed directly, this script plots several effects using `brain_plot()`.
+# There are two functions to process the input: `prep_dat_csv()` and `prep_dat_rds()`,
+# corresponding to the two ways to save results in "group_level.R" or "multi...level.R".
+#
+# The proprocessing function accepts a full path to the input file and returns a
+# tibble. The codes below use this tibble and `brain_plot()` to make the plots.
+
 library(tidyr)
 library(dplyr)
 library(ggplot2)
@@ -33,9 +48,22 @@ theme_surface <- list(
   )
 )
 
-# Plotting function
-# Note: the parcels should be in df$region
-brain_plot <- function(df, eff_term = NULL, eff = NULL, stat_term = "tstat",
+# brain_plot(): Plot a column in a tibble onto the brain
+#
+# Inputs:
+#  - `df`: a tibble, the names of the parcels should be in `df$region`
+#  - `stat_term`: a string, name of the column in `df` to plot
+#  - `eff_term` and `eff`: `eff_term` is a string, `eff` can be a string or a sequence of string,
+#      if specified, `df` will be filtered by `df[[eff_term]] %in% eff`
+#  - `lim`: a sequence of length 2, the limit of colormap to use (by default automatically determined)
+#  - `direct`: can set as -1 to reverse the colormap
+#  - `fig_title`: a string, title of the plot
+#  - `savename`: NULL (don't save) or a string, full path to save the figure
+#
+# Output:
+#    `fig`: A `ggplot2()` figure plotted with `geom_brain()` from package `ggseg`.
+#
+brain_plot <- function(df, stat_term = "tstat", eff_term = NULL, eff = NULL,
                     lim = NULL, direct = 1, fig_title = "Example figure", savename = NULL) {
   if (!is.null(eff_term)) {
     df <- df %>% filter(.data[[eff_term]] %in% .env$eff)
