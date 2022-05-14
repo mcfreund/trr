@@ -57,9 +57,9 @@ do_waves <- c(1, 2)
 n_cores <- 20
 tasks <- "Stroop"
 sessions <- "baseline"
-fname <- "projections__stroop__schafer_full__n_resamples100.csv"  # Input from ./code/spatial/multi...task.R
-mle_output <- "multivariate_linear_model_schafer_full.csv"
-bayes_output <- "mv_bayes_MCMC_coefs_schafer_full.rds"
+fname <- "projections__stroop__schafer_diag__n_resamples100.csv"  # Input from ./code/spatial/multi...task.R
+mle_output <- "multivariate_linear_model_schafer_diag.csv"
+bayes_output <- "mv_bayes_MCMC_coefs_schafer_diag.rds"
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
