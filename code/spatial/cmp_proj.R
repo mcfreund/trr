@@ -61,13 +61,13 @@ auc_summary <- new_dat %>%
 
 # Plotting AUC
 clim <- c(0.45, 0.65)
-f1 <- brain_plot(filter(auc_summary, wave == "wave1"), stat_term = "m_auc_full", lim = clim,
-  fig_title = "wave1, full covariance matrix")
-f2 <- brain_plot(filter(auc_summary, wave == "wave1"), stat_term = "m_auc_diag", lim = clim,
-  fig_title = "wave1, diagonal covariance matrix")
-f3 <- brain_plot(filter(auc_summary, wave == "wave2"), stat_term = "m_auc_full", lim = clim,
-  fig_title = "wave2, full covariance matrix")
-f4 <- brain_plot(filter(auc_summary, wave == "wave2"), stat_term = "m_auc_diag", lim = clim,
-  fig_title = "wave2, diagonal covariance matrix")
+f1 <- brain_plot(filter(auc_summary, wave == "wave1"), stat_term = "m_auc_diag", lim = clim,
+  fig_title = "variance only, wave1")
+f2 <- brain_plot(filter(auc_summary, wave == "wave1"), stat_term = "m_auc_full", lim = clim,
+  fig_title = "variance and covariance, wave1")
+f3 <- brain_plot(filter(auc_summary, wave == "wave2"), stat_term = "m_auc_diag", lim = clim,
+  fig_title = "variance only, wave2")
+f4 <- brain_plot(filter(auc_summary, wave == "wave2"), stat_term = "m_auc_full", lim = clim,
+  fig_title = "variance and covariance, wave2")
 (f1 + f2) / (f3 + f4) + plot_annotation(title = "Mean AUC across subjects")
 ggsave(here("out", "spatial", "mean_AUC.png"))

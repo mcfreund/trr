@@ -106,6 +106,8 @@ if (sys.nframe() == 0) {
   uv_brm_fname <- "univariate_bayesian_model.csv"
   mv_mcmc <- "mv_bayes_MCMC_coefs.rds"  # Coefficients from every MCMC sample
   uv_mcmc <- "uv_bayes_MCMC_coefs.rds"
+  mv_full <- "mv_bayes_MCMC_coefs_schafer_full.rds"  # For "schafer_full"
+  mv_diag <- "mv_bayes_MCMC_coefs_schafer_diag.rds"  # For "schafer_diag"
 
 
   ############################ lme4 Results #################################
@@ -169,6 +171,40 @@ if (sys.nframe() == 0) {
     # Bind into a large tibble
     bind_rows(new_samples, .id = "region")
   }
+
+
+  ############# Comparing "schafer_full" and "schafer_diag" ###############
+
+  full_mdl <- prep_dat_rds(here("out", "spatial", mv_full))
+  diag_mdl <- prep_dat_rds(here("out", "spatial", mv_diag))
+
+  # Random effect of hilo relative to trial-level error (the residual)
+  clim <- c(0, 0.5)
+  f_uv_hilo1 <- brain_plot(filter(diag_mdl, Term == "hiloc1_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "variance only, wave1")
+  f_mv_hilo1 <- brain_plot(filter(full_mdl, Term == "hiloc1_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "variance and covariance, wave1")
+  f_uv_hilo2 <- brain_plot(filter(diag_mdl, Term == "hiloc2_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "variance only, wave2")
+  f_mv_hilo2 <- brain_plot(filter(full_mdl, Term == "hiloc2_subj_norm"),
+    stat_term = "Estimate", lim = clim, fig_title = "variance and covariance, wave2")
+  (f_uv_hilo1 + f_mv_hilo1) / (f_uv_hilo2 + f_mv_hilo2) + plot_annotation(
+    title = "Effect of (hi_lo|subj) relative to trial-level error in Stroop baseline")
+  ggsave(here("out", "spatial", "hilo_norm_full_diag.png"))
+
+  # Test-retest reliability
+  clim <- c(-0.6, 1)
+  f_uv_trr <- brain_plot(filter(diag_mdl, Term == "cor_subj__hiloc1__hiloc2"),
+    stat_term = "Estimate", lim = clim, fig_title = "variance only")
+  f_mv_trr <- brain_plot(filter(full_mdl, Term == "cor_subj__hiloc1__hiloc2"),
+    stat_term = "Estimate", lim = clim, fig_title = "variance and covariance")
+  f_uv_trr + f_mv_trr + plot_annotation(
+    title = "Test-retest correlation of hi-lo contrast in Stroop baseline")
+  ggsave(here("out", "spatial", "hilo_trr_full_diag.png"))
+
+
+  ################ Comparing "fda" and univarite methods ################
+
   uv_mdl <- prep_dat_rds(here("out", "spatial", uv_mcmc))
   mv_mdl <- prep_dat_rds(here("out", "spatial", mv_mcmc))
 
