@@ -138,6 +138,7 @@ if (task == "Stroop" & variable == "hilo_all") {
             )
 
           extra_trials <- matrix(NA, nrow = n_resamples, ncol = n_extra_cols)
+          colnames(extra_trials) <- rep(ttypes_to_resample[session_nm], n_extra_cols)
           for (i in seq_len(n_resamples)) {
 
             extra_in_run1 <- sample(stimuli_extra, length(stimuli_extra) / 2)
