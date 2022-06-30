@@ -105,7 +105,7 @@ behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols
 
 ## for dev/interactive use:
 if (FALSE) {
-  subj_i <- which(subjs == "DMCC1596165")
+  subj_i <- which(subjs == "448347")
   task_i <- 1
   wave_i <- 2
   session_i <- 1
@@ -280,7 +280,8 @@ allres <-
           rocobj <- roc(y_test, proj_bar, direction = "<", levels = classes)
 
           projs[[roi_i]] <-
-            data.table(value = proj_bar, variable = y_test, trial = trial_idxs[[test]], auc = rocobj$auc)
+            data.table(value = proj_bar, variable = y_test, trial = seq_along(proj_bar), auc = rocobj$auc)
+            #data.table(value = proj_bar, variable = y_test, trial = trial_idxs[[test]], auc = rocobj$auc)
 
         }
 
