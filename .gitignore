@@ -41,3 +41,15 @@ vignettes/*.pdf
 
 # large output / data files
 out/timeseries/
+out/spatial/
+out/inferential/
+
+# VS Code files
+.vscode/
+
+## dev
+scratch/
+
+## images
+figs/
+reports/*html
