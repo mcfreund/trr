@@ -1,3 +1,28 @@
+# Compute trial-level multivariate statistics
+#
+# Author: Michael Freund
+#
+# 05/13/2022 updated by Ruiqi Chen:
+#
+# This script trains a linear classifier for each subject * task * region using the
+# proactive & reactive sessions as training set and tests it on the baseline session.
+# The value predicted for each trial is saved along with the classifier's AUC.
+#
+# The variable `classifier` specifies the type of classifier to use. "fda" will use
+# the `fda()` function from the `mda` package for shrinkage-based LDA. "schafer_full"
+# uses the `lda_schafer()` function from package `sparsediscrim` for LDA, where the
+# covariance matrix is estimated by the method in Schafer and Strimmer (2005).
+# "schafer_diag" also uses `lda_schafer()` but with parameter `lambda = 1` so that
+# the off-diagonal elements of the estimated covariance matrix are forced to be 0.
+#
+# For "fda" classifier, the obtained statistic is the prediction for "variates";
+# for "schafer_full" and "schafer_diag", the statistic is the log of the ratio
+# between predicted posterior probability for high control over low control trial
+# type for each trial in the baseline condition.
+#
+# To-do: the training returns a few NAs for "schafer_full" and "schafer_diag" and
+# the reason is not clear yet.
+
 library(here)
 library(dplyr)
 library(data.table)
@@ -6,6 +31,7 @@ library(doParallel)
 library(foreach)
 library(mfutils)
 library(mda)
+library(sparsediscrim)
 library(pROC)
 
 source(here("code", "_constants.R"))
@@ -19,21 +45,27 @@ classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
 train <- c("proactive", "reactive")
 test <- c("baseline")
-shrinkage_factor <- 100
+classifier <- "schafer_diag"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda"
+shrinkage_factor <- 100  # Only used for "fda" classfier
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
-subjs <- subjs_wave12_all
+subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 do_waves <- c(1, 2)
-n_cores <- 28
+n_cores <- 12
 n_resamples <- 100
+
+fname <- ifelse(grep("^schafer", classifier),
+  paste0("projections__stroop__", classifier, "__n_resamples", n_resamples, ".csv"),
+  paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
+)  # Output filename (under ./out/spatial/)
 
 
 ## execute ----
 
 atlas <- get(atlas_nm)
-rois <- unique(atlas$key[[roi_col]])[1:10]
+rois <- unique(atlas$key[[roi_col]])
 waves <- waves[do_waves]
 n_classes <- length(classes)
 
@@ -53,19 +85,21 @@ behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_alltasks.cs
 cols <- c("subj", "wave", "task", "session", "trialtype", variable, "trialnum")
 behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols]
 
-## for dev/interactive use:
+# # for dev/interactive use:
 # subj_i <- 3
 # task_i <- 1
 # wave_i <- 1
 # session_i <- 1
 # roi_i <- 1
 
-cl <- makeCluster(n_cores, type = "FORK")
+cl <- makeCluster(n_cores, type = "FORK", outfile = "")
 registerDoParallel(cl)
 allres <-
   foreach(task_i = seq_along(tasks), .inorder = FALSE, .combine = "rbind") %:%
   foreach(subj_i = seq_along(subjs), .inorder = FALSE, .combine = "rbind") %:%
   foreach(wave_i = seq_along(waves), .inorder = FALSE, .combine = "rbind") %dopar% {
+
+    tryCatch({
 
     task_val <- tasks[task_i]
     subj_val <- subjs[subj_i]
@@ -138,6 +172,9 @@ allres <-
     projs <- enlist(rois)
     for (roi_i in seq_along(rois)) {
 
+      print(paste("Now processing", task_val, "task for subject", subj_val, wave_val,
+        "in region", roi_i, ":", rois[[roi_i]]))
+
       ## extract roi_i for each session
       data_clean_roi <- lapply(data_clean_rois, "[[", rois[roi_i])  ## list of matrices of vertex by trial
 
@@ -151,19 +188,34 @@ allres <-
       d_test <- t(do.call(cbind, data_clean_roi_goodverts[test]))
       d_train <- t(do.call(cbind, data_clean_roi_goodverts[train]))
 
+      ## Add column names to data for lda_schafer()
+      colnames(d_test) <- paste0("v", seq_len(ncol(d_test)))
+      colnames(d_train) <- paste0("v", seq_len(ncol(d_train)))
+
       ## train
       fits <- lapply(
         seq_len(nrow(resampled_idx)),
         function(resample_i) {
           .idx <- resampled_idx[resample_i, ]
-          fda(y_train ~ d_train[.idx, ], method = gen.ridge, lambda = shrinkage_factor)
+          if (classifier == "schafer_full") {
+            return(lda_schafer(d_train[.idx, ], y_train))
+          } else if (classifier == "schafer_diag") {
+            return(lda_schafer(d_train[.idx, ], y_train, lambda = 1))
+          } else {
+            return(fda(y_train ~ d_train[.idx, ], method = gen.ridge, lambda = shrinkage_factor))
+          }
         }
         #mc.cores = n_cores
       )
       ## test
       projs_i <- vapply(
         fits,
-        function(.x, .newdata) predict(.x, newdata = .newdata, type = "variates"),
+        function(.x, .newdata) if (grep("^schafer", classifier)) {
+          tmp <- predict(.x, newdata = .newdata, type = "prob")  # Note: using "score" seems to be wrong
+          return(as.numeric(t(log(tmp[classes[[2]]] + 1e-6) - log(tmp[classes[[1]]] + 1e-6))))
+        } else {
+          return(predict(.x, newdata = .newdata, type = "variates"))
+        },
         numeric(nrow(d_test)),
         .newdata = d_test
       )
@@ -183,8 +235,13 @@ allres <-
 
     res  ## return
 
-}
+    }, error = function(e) {
+      print("")
+      print(e)
+      print("")
+      return(NA)
+    })
+  }
 stopCluster(cl)
 
-fname <- paste0("projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples, ".csv")
 fwrite(allres, here("out", "spatial", fname))
