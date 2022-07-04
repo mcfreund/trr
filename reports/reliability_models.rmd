@@ -1,0 +1,181 @@
+---
+title: "Test-retest reliability models"
+output: 
+    html_document:
+        toc: false
+        toc_depth: 2
+        toc_float: false
+        number_sections: false
+        df_print: paged
+---
+
+This document outlines the test-retest reliability models considered in this project.
+
+
+
+```{r setup, results = FALSE, message = FALSE, echo = FALSE}
+
+library(ggplot2)
+library(reshape2)
+library(magrittr)
+library(colorspace)
+library(knitr)
+theme_set(theme_minimal(base_size = 18))
+
+## chen2021 style randome effects
+
+n_trial <- 10
+repetition <- as.factor(rep(c("test", "retest"), each = n_trial))
+condition <- as.factor(rep(c("incongruent", "congruent"), n_trial))
+
+stroop <- condition
+contrasts(stroop) <- matrix(c(-0.5, 0.5), nrow = 2, dimnames = list(c("congruent", "incongruent"), "incongruent"))
+stroop <- model.matrix(~ stroop)[, 2]
+mean_test <- as.numeric(repetition == "test")  ## dummy code wave
+mean_retest <- as.numeric(repetition == "retest")
+stroop_test <- stroop*test
+stroop_retest <- stroop*retest
+
+## plot:
+# ranefx_chen2021 %>%
+#   melt %>%
+#   ggplot(aes(Var2, Var1, fill = value)) +
+#   geom_tile() +
+#   geom_text(aes(label = value), size = 4) +
+#   scale_fill_continuous_diverging() +
+#   scale_x_discrete(position = "top") +
+#   theme(axis.text.y = element_blank(), panel.grid = element_blank()) +
+#   labs(x = "Regressor", y = "Trial")
+
+```
+
+
+# Design and Notation
+
+
+- trial $t \in 1, ..., T$
+- condition $c \in \{\text{incongruent}, \text{congruent}\}$
+- participant $p \in 1, ..., P$
+- session $s \in \{\text{baseline}, \text{proactive}, \text{reactive}\}$
+- repetition $r \in \{\text{test}, \text{retest}\}$
+- Response variable: $y$, considered here for a single ROI and for a single type of spatial model (i.e., univariate or multivariate model)
+
+The following indicator variables will be used to denote a \textbf{dummy or treatment-coding} scheme:
+
+$$
+\begin{equation*}
+\begin{split}
+	&\text{incon} = 
+	\begin{cases}
+		1 & \text{if condition = incongruent} \\
+		0 & \text{if condition = congruent}
+	\end{cases},\\
+	&\text{retest} = 
+	\begin{cases}
+		1 & \text{if repetition = retest} \\
+		0 & \text{if repetition = test}
+	\end{cases}
+\end{split}
+\end{equation*}
+$$
+
+
+The following expression will be used to denote a \textbf{contrast-coding} scheme for the condition factor:
+
+$$
+  \text{stroop} = 
+  \begin{cases}
+    1/2 & \text{if trial $t$ condition = incongruent} \\
+    -1/2 & \text{if trial $t$ condition = congruent}
+  \end{cases}
+$$
+
+
+# Model 1: single session, Chen (2021)-style random effects
+
+## notation
+
+$$
+\begin{equation}
+	\begin{split}
+		& y_{tcpr} \sim a + b \cdot \mathrm{retest} + d \cdot \mathrm{incon} + g \cdot \mathrm{retest} \cdot \mathrm{incon} + \\
+		& \qquad \alpha_p \cdot (1 - \mathrm{retest}) + \beta_p \cdot \mathrm{retest} + \\
+		& \qquad \delta_p \cdot (1 - \mathrm{retest}) \cdot \mathrm{stroop} + \gamma_p \cdot \mathrm{retest} \cdot \mathrm{stroop} +  \\
+		& \qquad \epsilon_{tcpr} \\
+		& (\alpha_p, \beta_p)^\intercal \sim \mathcal{N}(\textbf{0}, \textbf{R}^{(0)}_{2\times2}) \\
+		& (\delta_p, \gamma_p)^\intercal \sim \mathcal{N}(\textbf{0}, \textbf{R}^{(1)}_{2\times2}) \\
+		& \epsilon_{tcpr} \sim \mathcal{N}(0, \sigma) \\		
+	\end{split}
+\end{equation}
+$$
+
+Notes:
+
+- All elements of $\mathbf{R}^{(0)}$ and $\mathbf{R}^{(1)}$ are freely estimated
+- in the fixed effects, repetition and condition are treatment coded, with test and congruent as the reference levels
+- in the random effects, the condition factor is contrast coded, while the repetition factor is treatment coded
+
+
+## example code
+```{r, eval = FALSE}
+m1 <- brm(
+  y ~ repetition * condition + 
+    (0 + mean_test + mean_retest | subj) + 
+    (0 + stroop_test + stroop_retest | subj),
+    data = d
+  )
+```
+
+Where `mean_test`, `mean_retest`, `stroop_test`, `stroop_retest` are numeric vectors capturing the mean across 
+conditions (incongruent + congruent), and the stroop effect contrast (incongruent - congruent),  per repetition:
+
+
+```{r}
+cbind(trial = rep(1:10, 2), mean_test, mean_retest, stroop_test, stroop_retest)
+```
+
+
+# Model 2: single session, Chen (2021)-style random effects, with heterogeneous trial-level variance, and t-distributed error
+
+## notation
+
+$$
+\begin{equation}
+	\begin{split}
+		& y_{tcpr} \sim a + b \cdot \mathrm{retest} + d \cdot \mathrm{incon} + g \cdot \mathrm{retest} \cdot \mathrm{incon} + \\
+		& \qquad \alpha_p \cdot (1 - \mathrm{retest}) + \beta_p \cdot \mathrm{retest} + \\
+		& \qquad \delta_p \cdot (1 - \mathrm{retest}) \cdot \mathrm{stroop} + \gamma_p \cdot \mathrm{retest} \cdot \mathrm{stroop} +  \\
+		& \qquad \epsilon_{tcpr} \\
+		& (\alpha_p, \beta_p)^\intercal \sim \mathcal{N}(\textbf{0}, \textbf{R}^{(0)}_{2\times2}) \\
+		& (\delta_p, \gamma_p)^\intercal \sim \mathcal{N}(\textbf{0}, \textbf{R}^{(1)}_{2\times2})	\\
+		& \epsilon_{tcpr} \sim \mathcal{T}(0, \nu_{cpr}) \\
+		& \mathrm{log}(\nu_{cpr}) \sim u + w \cdot \mathrm{retest} + x \cdot \mathrm{incon} + z \cdot \mathrm{retest} \cdot \mathrm{incon} + \\
+		& \qquad \upsilon_p \cdot (1 - \mathrm{retest}) + \omega _p \cdot \mathrm{retest} + \\
+		& \qquad \chi_p \cdot (1 - \mathrm{retest}) \cdot \mathrm{stroop} + \zeta_p \cdot \mathrm{retest} \cdot \mathrm{stroop} \\
+		& (\upsilon_p, \omega_p)^\intercal \sim \mathcal{N}(\textbf{0}, \textbf{S}^{(0)}_{2\times2}) \\
+		& (\chi_p, \zeta_p)^\intercal \sim \mathcal{N}(\textbf{0}, \textbf{S}^{(1)}_{2\times2})
+	\end{split}
+\end{equation}
+$$
+
+Notes:
+
+- See notes for Model 1
+- trial-level SD is allowed to vary with fixed effect of repetition*condition and random effect across participants with a structure matching the random effects model of the response variable
+- t-distributed error used for robustness to outliers in response
+
+## example code
+```{r, eval = FALSE}
+m2 <- brm(
+  bf(
+    y ~ repetition * condition + 
+      (0 + mean_test + mean_retest | subj) + 
+      (0 + stroop_test + stroop_retest | subj),
+    sigma ~ repetition * condition + 
+      (0 + mean_test + mean_retest | subj) + 
+      (0 + stroop_test + stroop_retest | subj)
+      ),
+  data = d,
+  family = student()
+)
+```
