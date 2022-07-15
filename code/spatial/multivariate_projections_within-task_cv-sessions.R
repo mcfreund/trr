@@ -29,10 +29,10 @@ library(data.table)
 library(abind)
 library(doParallel)
 library(foreach)
-library(mfutils)
 library(mda)
-library(sparsediscrim)
+library(klaR)
 library(pROC)
+library(mfutils)
 
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
@@ -47,8 +47,9 @@ demean_trial <- FALSE
 file_name_resamples <- here("out", "spatial", "trialidx_stroop_congruency.RDS")
 classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
-classifier <- "fda"  # "schafer_full", "schafer_diag" (ignoring covariances) or "fda"
-shrinkage_factor <- 100  # Only used for "fda" classfier
+classifier <- "rda"  ## or "ridge"
+shrinkage_factor_ridge <- 100
+shrinkage_factor_rda <- 1/4
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
 subjs <- subjs_wave12_complete
@@ -96,6 +97,7 @@ alltrials <- read_results(
   n_cores = n_cores
 )
 
+
 ## read trial data:
 ## behav$hilo indicates high-demand (incongruent) vs low-demand (congruent) for only bias trialtypes
 ## behav$hilo_all indicates high-demand (incongruent) vs low-demand (congruent) for both bias and pc50 trialtypes
@@ -110,6 +112,22 @@ if (FALSE) {
   wave_i <- 2
   session_i <- 1
   roi_i <- 1
+}
+
+
+## utilities ----
+
+## convenience function for use with klaR::rda()
+ldf <- function(object, newdata, class_names = c("hi", "lo")) {
+  ## class_names: positive class first
+  r <- object$regularization
+  if (r["lambda"] < 1) stop("Not configured for QDA.")
+  sigmahat <- object$covpooled
+  scaled_identity <- mean(diag(sigmahat)) * diag(nrow(sigmahat))
+  sigmahat_reg <- (1 - r["gamma"]) * sigmahat + r["gamma"] * scaled_identity
+  w <- solve(sigmahat_reg) %*% (object$means[, class_names] %*% rbind(1, -1))
+  w <- w / sqrt(sum(w^2))  ## scale to unit length
+  newdata %*% w
 }
 
 
@@ -243,45 +261,42 @@ allres <-
               idx2 <- resamples_train[[2]][i, ]
               X <- rbind(l_train[[1]][idx1, ], l_train[[2]][idx2, ])
               y <- rownames(X)
-              if (classifier == "schafer_full") {
-                fit <- lda_schafer(X, y)
-              } else if (classifier == "schafer_diag") {
-                fit <- lda_schafer(X, y, lambda = 1)
-              } else {
-                fit <- fda(y ~ X, method = gen.ridge, lambda = shrinkage_factor)
-              }
-              return(fit)
+              fit_ridge <- mda::fda(y ~ X, method = gen.ridge, lambda = shrinkage_factor_ridge)
+              fit_rda <- klaR::rda(x = X, grouping = y, gamma = shrinkage_factor_rda, lambda = 1)
+              return(list(ridge = fit_ridge, rda = fit_rda))
             }
           )
 
           ## test
-          projs_i <- vapply(
+          projs_i <- lapply(
             fits,
             function(.x, .newdata) {
-              if (grepl("^schafer", classifier)) {
-                tmp <- predict(.x, newdata = .newdata, type = "prob")  # Note: using "score" seems to be wrong
-                res <- as.numeric(t(log(tmp[classes[[2]]] + 1e-6) - log(tmp[classes[[1]]] + 1e-6)))
-              } else {
-                tmp <- predict(.x, newdata = .newdata, type = "distances")
-                res <- tmp[, "lo"] - tmp[, "hi"]
-                #res <- predict(.x, newdata = .newdata, type = "variates")
-              }
-              return(res)
+              fit_ridge <- .x$ridge
+              fit_rda <- .x$rda
+              tmp <- predict(fit_ridge, newdata = .newdata, type = "distances")
+              res_ridge <- tmp[, "lo"] - tmp[, "hi"]
+              res_rda <- ldf(fit_rda, newdata = .newdata, class_names = c("hi", "lo"))  ## positive, negative
+              return(cbind(ridge = c(res_ridge), rda = c(res_rda)))
             },
-            numeric(nrow(d_test)),
             .newdata = d_test
           )
-          #image(projs_i)
-          #proj_bar <- apply(projs_i, 1, median)
-          proj_bar <- rowMeans(projs_i)
+          projs_i <- abind(projs_i, rev.along = 0)
+          #image(projs_i[, 1, ])
+          #image(projs_i[, 2, ])
+          proj_bar <- rowMeans(projs_i, dims = 2)
 
-          ## summarize performance with auc
+          ## bind into single dataframe:
           y_test <- rownames(d_test)
-          rocobj <- roc(y_test, proj_bar, direction = "<", levels = classes)
-
           projs[[roi_i]] <-
-            data.table(value = proj_bar, variable = y_test, trial = seq_along(proj_bar), auc = rocobj$auc)
-            #data.table(value = proj_bar, variable = y_test, trial = trial_idxs[[test]], auc = rocobj$auc)
+            data.table(
+              value = proj_bar,
+              variable = y_test,
+              trial = seq_along(proj_bar),  ## trial_idxs[[test]]
+              ## summarize performance with auc:
+              auc_ridge = roc(y_test, proj_bar[, "ridge"], direction = "<", levels = classes)$auc,
+              auc_rda = roc(y_test, proj_bar[, "rda"], direction = "<", levels = classes)$auc,
+              uv = rowMeans(d_test)  ## univariate projections
+              )
 
         }
 
