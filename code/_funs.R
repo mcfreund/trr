@@ -185,3 +185,78 @@ read_betas_dmcc <- function(
 afni <- function (f, args, afni_path = "/usr/local/pkg/linux_openmp_64/", ...) {
     system2(command = paste0(afni_path, f), args = args, stdout = TRUE, ...)
 }
+
+
+
+## model_name
+## object: filename_prefix, formula_response, formula_sigma
+get_model_info <- function(model_name, response_name, session_name) {
+
+  if (model_name == "full") {
+
+    res <- list(
+      model_prefix =
+        paste0(
+          "hbm__response_", response_name, "__family_student__sigma_full__ranef_full__lscov_full__session_",
+          session_name
+          ),
+      formula_string =
+        paste0(
+          " ~ ",
+          "0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 + ",
+          "(0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 | a | subj)"
+        ),
+      formula_sigma =
+        formula(
+          sigma ~ 0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 +
+          (0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 | a | subj)
+        )
+    )
+
+  } else if (model_name == "no_lscov") {
+
+    res <- list(
+      model_prefix =
+        paste0(
+          "hbm__response_", response_name, "__family_student__sigma_full__ranef_full__lscov_none__session_",
+          session_name
+          ),
+      formula_string =
+        paste0(
+          " ~ ",
+          "0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 + ",
+          "(0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 | subj)"
+        ),
+      formula_sigma =
+        formula(
+          sigma ~ 0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 +
+          (0 + lo_wave1 + lo_wave2 + hi_wave1 + hi_wave2 | subj)
+        )
+    )
+
+  } else if (model_name == "no_lscov_symm") {
+
+    res <- list(
+      model_prefix =
+        paste0(
+          "hbm__response_", response_name, "__family_student__sigma_symm__ranef_symm__lscov_none__session_",
+          session_name
+          ),
+      formula_string =
+        paste0(
+          " ~ ",
+          "0 + mean_wave1 + mean_wave2 + hilo_wave1 + hilo_wave2 + ",
+          "(0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
+        ),
+      formula_sigma =
+        formula(
+          sigma ~ 0 + mean_wave1 + mean_wave2 + hilo_wave1 + hilo_wave2 +
+          (0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)
+        )
+    )
+
+  }
+
+  res
+
+}

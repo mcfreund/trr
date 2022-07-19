@@ -56,152 +56,149 @@ bads <- data.table(
 
 if (task == "Stroop" & variable == "hilo_all") {
 
-  behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_Stroop.csv"), na.strings = c("", "NA"))
-  cols <- c("subj", "wave", "session", "run", "trial.num", "trialtype", "pc", "item", "color", "word")
-  behav <- behav[wave %in% do_waves, ..cols]
-  behav[, task := "Stroop"]
-  behav[, wave := paste0("wave", wave)]
-  behav[session == "bas", session := "baseline"]
-  behav[session == "pro", session := "proactive"]
-  behav[session == "rea", session := "reactive"]
-  for (ses in sessions) {
-    behav[session == ses, trial := trial.num + n_trialspr[paste0("Stroop_", ses)] * (run - 1)]
-  }
-
-  ## merge info on bad trials:
-  behav$is_good <- match(
-    behav[, paste0(wave, "_", task, "_", session, "_", subj, "_", trial)],
-    paste0(bads$id, "_", bads$trial)
-  ) %>% is.na
-
-  ## resample:
-
-  ttypes_to_resample <- c(  ## per run
-    baseline = "biasCon",
-    proactive = "biasInCon",
-    reactive = "biasInCon"
-  )
-
-  resample_to <- c(  ## per run*stimulus
-    baseline = 4, ## actually 4.5
-    proactive = 1, ## actually 1.5
-    reactive = 6
-  )
-
-  resample_stroop <- function(nms, trials, n_resamples, resample_to) {
-    trials_idx <- resample_idx(nms, n_resamples = n_resamples, resample_to = resample_to)
-    ## convert index for trials into actual trial numbers.
-    apply(trials_idx, 2, function(x) trials[x])
-  }
-
-  res <- enlist(combo_paste(subjs, "__", waves, "__", sessions))
-  for (subj_nm in subjs) {
-    for (wave_nm in waves) {
-      for (session_nm in sessions) {
-
-        ## get relevant subset of trials, drop bad ones
-        behav_i <- behav[subj == subj_nm & wave == wave_nm & session == session_nm & is_good]
-        #behav_i <- behav[subj == subj_nm & wave == wave_nm & session == session_nm]
-
-        ## drop "buffcon" in reactive
-        if (session_nm == "reactive") behav_i <- behav_i[!grepl("RED|BLUE", item)]
-
-        ## trials to resample (bias)
-        behav_i_bias_resamp <- behav_i[trialtype == ttypes_to_resample[session_nm], ]
-        global_min <- min(table(behav_i_bias_resamp[, paste0(item, "_", run, "__", trialtype)]))
-        if (global_min < resample_to[session_nm]) {
-          resamp2 <- global_min
-        } else {
-          resamp2 <- resample_to[session_nm]
-        }
-        trials_bias_resamp <-
-          resample_stroop(
-            nms = behav_i_bias_resamp[, paste0(item, "_", run, "__", trialtype)],
-            trials = behav_i_bias_resamp[, trial],
-            n_resamples = n_resamples,
-            resample_to = resamp2
-          )
-
-        if (session_nm %in% c("baseline", "proactive")) {
-
-          ## because baseline session requires resampling the trials (over both runs) of each stimulus to an odd nubmer
-          ## (9), fpr each stimulus, randomly resample one run to 4 and other to 5.
-          n_extra_cols <- switch(session_nm, baseline = 4, proactive = 12)
-          names_extra_cols <- rep(ttypes_to_resample[session_nm], n_extra_cols)
-          stimuli_extra <- switch(
-            session_nm,
-            baseline = c("blueBLUE", "redRED", "purplePURPLE", "whiteWHITE"),
-            proactive =
-              c("redBLUE", "purpleBLUE", "whiteBLUE", "blueRED", "purpleRED", "whiteRED", "bluePURPLE", "redPURPLE",
-                "whitePURPLE", "blueWHITE", "redWHITE", "purpleWHITE"
-              )
-            )
-
-          extra_trials <- matrix(NA, nrow = n_resamples, ncol = n_extra_cols)
-          colnames(extra_trials) <- rep(ttypes_to_resample[session_nm], n_extra_cols)
-          for (i in seq_len(n_resamples)) {
-
-            extra_in_run1 <- sample(stimuli_extra, length(stimuli_extra) / 2)
-            extra_in_run2 <- setdiff(stimuli_extra, extra_in_run1)
-            trials_run1 <- resample_stroop(
-              behav_i[item %in% extra_in_run1 & run == 1 & !trial %in% trials_bias_resamp[i, ], item],
-              behav_i[item %in% extra_in_run1 & run == 1 & !trial %in% trials_bias_resamp[i, ], trial],
-              1,
-              1
-            )
-            trials_run2 <- resample_stroop(
-              behav_i[item %in% extra_in_run2 & run == 2 & !trial %in% trials_bias_resamp[i, ], item],
-              behav_i[item %in% extra_in_run2 & run == 2 & !trial %in% trials_bias_resamp[i, ], trial],
-              1,
-              1
-            )
-            extra_trials[i, ] <- c(trials_run1, trials_run2)
-          }
-
-          trials_bias_resamp <- cbind(trials_bias_resamp, extra_trials)
-
-        }
-        colnames(trials_bias_resamp) <- gsub("(.*__)(.*)", "\\2", colnames(trials_bias_resamp))
-
-        ## PC50 (don't resample)
-        behav_i_pc50 <- behav_i[pc == "PC50", ]
-        trials_pc50 <-
-          resample_stroop(
-            nms = behav_i_pc50[, trialtype],
-            trials = behav_i_pc50[, trial],
-            n_resamples = n_resamples,
-            resample_to = NULL
-          )
-
-        ## bias trials to NOT resample
-        behav_i_bias <- behav_i[trialtype != ttypes_to_resample[session_nm] & pc == "bias", ]
-        trials_bias <-
-          resample_stroop(
-            nms = behav_i_bias[, trialtype],
-            trials = behav_i_bias[, trial],
-            n_resamples = n_resamples,
-            resample_to = NULL
-          )
-
-        dim(trials_bias_resamp)
-        dim(trials_bias)
-        dim(trials_pc50)
-        #stopifnot(length(unique(rowSums(trials_pc50))) == 1)  ## check that all resamples have same set of trials
-        #stopifnot(length(unique(rowSums(trials_bias))) == 1)  ## check that all resamples have same set of trials
-
-        ## bind all together
-        trials <- cbind(trials_bias_resamp, trials_pc50, trials_bias)
-        colnames(trials) <- gsub("bias|PC50", "", colnames(trials))
-
-        nm <- paste0(subj_nm, "__", wave_nm, "__", session_nm)
-        res[[nm]] <- trials
-
-      }
-    }
-  }
-
+behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_Stroop.csv"), na.strings = c("", "NA"))
+cols <- c("subj", "wave", "session", "run", "trial.num", "trialtype", "pc", "item", "color", "word")
+behav <- behav[wave %in% do_waves, ..cols]
+behav[, task := "Stroop"]
+behav[, wave := paste0("wave", wave)]
+behav[session == "bas", session := "baseline"]
+behav[session == "pro", session := "proactive"]
+behav[session == "rea", session := "reactive"]
+for (ses in sessions) {
+  behav[session == ses, trial := trial.num + n_trialspr[paste0("Stroop_", ses)] * (run - 1)]
 }
 
+## merge info on bad trials:
+behav$is_good <- match(
+  behav[, paste0(wave, "_", task, "_", session, "_", subj, "_", trial)],
+  paste0(bads$id, "_", bads$trial)
+) %>% is.na
+
+## resample:
+
+ttypes_to_resample <- c(  ## per run
+  baseline = "biasCon",
+  proactive = "biasInCon",
+  reactive = "biasInCon"
+)
+
+resample_to <- c(  ## per run*stimulus
+  baseline = 4, ## actually 4.5
+  proactive = 1, ## actually 1.5
+  reactive = 6
+)
+
+resample_stroop <- function(nms, trials, n_resamples, resample_to) {
+  trials_idx <- resample_idx(nms, n_resamples = n_resamples, resample_to = resample_to)
+  ## convert index for trials into actual trial numbers.
+  apply(trials_idx, 2, function(x) trials[x])
+}
+
+res <- enlist(combo_paste(subjs, "__", waves, "__", sessions))
+for (subj_nm in subjs) {
+  for (wave_nm in waves) {
+    for (session_nm in sessions) {
+
+      ## get relevant subset of trials, drop bad ones
+      behav_i <- behav[subj == subj_nm & wave == wave_nm & session == session_nm & is_good]
+      #behav_i <- behav[subj == subj_nm & wave == wave_nm & session == session_nm]
+
+      ## drop "buffcon" in reactive
+      if (session_nm == "reactive") behav_i <- behav_i[!grepl("RED|BLUE", item)]
+
+      ## trials to resample (bias)
+      behav_i_bias_resamp <- behav_i[trialtype == ttypes_to_resample[session_nm], ]
+      global_min <- min(table(behav_i_bias_resamp[, paste0(item, "_", run, "__", trialtype)]))
+      if (global_min < resample_to[session_nm]) {
+        resamp2 <- global_min
+      } else {
+        resamp2 <- resample_to[session_nm]
+      }
+      trials_bias_resamp <-
+        resample_stroop(
+          nms = behav_i_bias_resamp[, paste0(item, "_", run, "__", trialtype)],
+          trials = behav_i_bias_resamp[, trial],
+          n_resamples = n_resamples,
+          resample_to = resamp2
+        )
+
+      if (session_nm %in% c("baseline", "proactive")) {
+
+        ## because baseline session requires resampling the trials (over both runs) of each stimulus to an odd nubmer
+        ## (9), fpr each stimulus, randomly resample one run to 4 and other to 5.
+        n_extra_cols <- switch(session_nm, baseline = 4, proactive = 12)
+        names_extra_cols <- rep(ttypes_to_resample[session_nm], n_extra_cols)
+        stimuli_extra <- switch(
+          session_nm,
+          baseline = c("blueBLUE", "redRED", "purplePURPLE", "whiteWHITE"),
+          proactive =
+            c("redBLUE", "purpleBLUE", "whiteBLUE", "blueRED", "purpleRED", "whiteRED", "bluePURPLE", "redPURPLE",
+              "whitePURPLE", "blueWHITE", "redWHITE", "purpleWHITE"
+            )
+          )
+
+        extra_trials <- matrix(NA, nrow = n_resamples, ncol = n_extra_cols)
+        colnames(extra_trials) <- rep(ttypes_to_resample[session_nm], n_extra_cols)
+        for (i in seq_len(n_resamples)) {
+
+          extra_in_run1 <- sample(stimuli_extra, length(stimuli_extra) / 2)
+          extra_in_run2 <- setdiff(stimuli_extra, extra_in_run1)
+          trials_run1 <- resample_stroop(
+            behav_i[item %in% extra_in_run1 & run == 1 & !trial %in% trials_bias_resamp[i, ], item],
+            behav_i[item %in% extra_in_run1 & run == 1 & !trial %in% trials_bias_resamp[i, ], trial],
+            1,
+            1
+          )
+          trials_run2 <- resample_stroop(
+            behav_i[item %in% extra_in_run2 & run == 2 & !trial %in% trials_bias_resamp[i, ], item],
+            behav_i[item %in% extra_in_run2 & run == 2 & !trial %in% trials_bias_resamp[i, ], trial],
+            1,
+            1
+          )
+          extra_trials[i, ] <- c(trials_run1, trials_run2)
+        }
+
+        trials_bias_resamp <- cbind(trials_bias_resamp, extra_trials)
+
+      }
+      colnames(trials_bias_resamp) <- gsub("(.*__)(.*)", "\\2", colnames(trials_bias_resamp))
+
+      ## PC50 (don't resample)
+      behav_i_pc50 <- behav_i[pc == "PC50", ]
+      trials_pc50 <-
+        resample_stroop(
+          nms = behav_i_pc50[, trialtype],
+          trials = behav_i_pc50[, trial],
+          n_resamples = n_resamples,
+          resample_to = NULL
+        )
+
+      ## bias trials to NOT resample
+      behav_i_bias <- behav_i[trialtype != ttypes_to_resample[session_nm] & pc == "bias", ]
+      trials_bias <-
+        resample_stroop(
+          nms = behav_i_bias[, trialtype],
+          trials = behav_i_bias[, trial],
+          n_resamples = n_resamples,
+          resample_to = NULL
+        )
+
+      dim(trials_bias_resamp)
+      dim(trials_bias)
+      dim(trials_pc50)
+      #stopifnot(length(unique(rowSums(trials_pc50))) == 1)  ## check that all resamples have same set of trials
+      #stopifnot(length(unique(rowSums(trials_bias))) == 1)  ## check that all resamples have same set of trials
+
+      ## bind all together
+      trials <- cbind(trials_bias_resamp, trials_pc50, trials_bias)
+      colnames(trials) <- gsub("bias|PC50", "", colnames(trials))
+
+      nm <- paste0(subj_nm, "__", wave_nm, "__", session_nm)
+      res[[nm]] <- trials
+
+    }
+  }
+}
 
 ## save
 
