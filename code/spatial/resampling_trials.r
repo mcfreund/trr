@@ -37,11 +37,12 @@ file_name <- here("out", "spatial", "trialidx_stroop_congruency.RDS")
 
 draw_plots <- TRUE
 waves <- waves[do_waves]
+tasks <- task  # In case of error
 n_classes <- length(classes)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
-  waves = waves, tasks = tasks, sessions = sessions, subjs = subjs,
+  waves = waves, tasks = task, sessions = sessions, subjs = subjs,
   glmname = "null_2rpm",
   filename_fun = function(...) "errts_trials_target_epoch.RDS",
   read_fun = readRDS,
@@ -54,7 +55,7 @@ bads <- data.table(
 )
 #bads <- bads %>% tidyr::separate(id, c("wave", "task", "session", "subj"), sep = "_")
 
-if (task == "Stroop" & variable == "hilo_all") {
+if (task != "Stroop" | variable != "hilo_all") stop("Only for Stroop!")
 
 behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_Stroop.csv"), na.strings = c("", "NA"))
 cols <- c("subj", "wave", "session", "run", "trial.num", "trialtype", "pc", "item", "color", "word")

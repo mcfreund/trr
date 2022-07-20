@@ -2,6 +2,11 @@
 #
 # Author: Michael Freund
 #
+#
+# 07/20/2022 updated:
+#
+# Use klaR instead of the (problematic) sparsediscrim for classification.
+#
 # 05/13/2022 updated by Ruiqi Chen:
 #
 # This script trains a linear classifier for each subject * task * region using the
@@ -20,7 +25,7 @@
 # between predicted posterior probability for high control over low control trial
 # type for each trial in the baseline condition.
 #
-# To-do: the training returns a few NAs for "schafer_full" and "schafer_diag" and
+# The training returns a few NAs for "schafer_full" and "schafer_diag" and
 # the reason is not clear yet.
 
 library(here)
@@ -29,10 +34,10 @@ library(data.table)
 library(abind)
 library(doParallel)
 library(foreach)
+library(mfutils)
 library(mda)
 library(klaR)
 library(pROC)
-library(mfutils)
 
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
@@ -49,7 +54,7 @@ classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
 classifier <- "rda"  ## or "ridge"
 shrinkage_factor_ridge <- 100
-shrinkage_factor_rda <- 1/4
+shrinkage_factor_rda <- 0.25
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
 subjs <- subjs_wave12_complete

@@ -6,8 +6,8 @@ For `code/timeseries/null_2rpm/run_deconvolve.sh`, we will use the lists `subjec
 
 Then in `code/_constants.R` we only look at Stroop and exclude three subjects from further processing:
 
-- DMCC5009144 has no DMCC2 Stroop baseline
+- DMCC5009144 has no wave 1 Stroop baseline
 - 197449 has poor data in Stroop baseline
-- 178243 Stroop wave 1 baseline run 2 ended a bit early
+- 178243 wave 1 Stroop baseline run 2 ended a bit early
 
 Also note that DMCC6418065 and DMCC6671683 have missing Stroop behavioral data.

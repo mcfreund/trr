@@ -16,6 +16,7 @@ subjs <- subjs_wave12_all
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 do_waves <- c(1, 2)
+do_tasks <- c("Stroop")
 n_cores <- 20
 
 # subj_i <- 1
@@ -27,6 +28,7 @@ n_cores <- 20
 
 atlas <- get(atlas_nm)
 waves <- waves[do_waves]
+tasks <- do_tasks
 
 cl <- makeCluster(n_cores, type = "FORK")
 registerDoParallel(cl)
@@ -56,3 +58,4 @@ res <-
     fwrite(means, filename)
 
 }
+stopCluster(cl)
