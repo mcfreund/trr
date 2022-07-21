@@ -3,9 +3,22 @@
 # Author: Michael Freund
 #
 #
-# 07/20/2022 updated:
+# 07/21/2022 update:
 #
-# Use klaR instead of the (problematic) sparsediscrim for classification.
+# Problem: ldf() use the `.covpooled` of lda models, which cannot be estimated when data contain NAs
+# See https://github.com/cran/klaR/blob/master/R/rda.R#L526-L531.
+#
+# Two reason:
+#
+# 1. Bad trials, e.g., Subject 7 (448347) wave 2 Stroop baseline trial 93 & 94.
+#  This should be fixed after the update of `resampleing_trials.r`.
+#
+# 2. Divide by 0 error when normalizing vertices with no fluctuation.
+#  This should be fixed by the update in `sdev <- sqrt(Var(eps, 2)) + 1e-6`.
+#
+# 07/20/2022 update:
+#
+# Use `klaR`` instead of the (problematic) `sparsediscrim`` for classification.
 #
 # 05/13/2022 updated by Ruiqi Chen:
 #
@@ -59,7 +72,7 @@ roi_col <- "parcel"  ## "parcel" or "network"
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 n_cores <- 18
-do_waves <- c(2, 3)
+do_waves <- c(1, 2)
 subjs <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
 )
@@ -107,15 +120,6 @@ behav <- fread(input_fname, na.strings = c("", "NA"))
 cols <- c("subj", "wave", "task", "session", "trialtype", variable, "trialnum")
 behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols]
 
-## for dev/interactive use:
-if (FALSE) {
-  subj_i <- which(subjs == "DMCC8760894")
-  task_i <- 1
-  wave_i <- 1
-  session_i <- 1
-  roi_i <- 1
-}
-
 
 ## utilities ----
 
@@ -130,6 +134,16 @@ ldf <- function(object, newdata, class_names = c("hi", "lo")) {
   w <- solve(sigmahat_reg) %*% (object$means[, class_names] %*% rbind(1, -1))
   w <- w / sqrt(sum(w^2))  ## scale to unit length
   newdata %*% w
+}
+
+
+## for dev/interactive use:
+if (FALSE) {
+  subj_i <- which(subjs == "448347")
+  task_i <- 1
+  wave_i <- 2
+  session_i <- 1
+  roi_i <- 1
 }
 
 
@@ -200,11 +214,11 @@ allres <-
         if (divnorm_vertex) {
           ## divisive normalize each vertex by residual sdev over trials? (univariate prewhiten)
           eps <- resid(.lm.fit(x = indicator(behav_session$trialtype[idx]), y = t(trials_session_c[, idx])))
-          sdev <- sqrt(Var(eps, 2))
+          sdev <- sqrt(Var(eps, 2)) + 1e-6  # To prevent NaN for vectices with no BOLD
           trials_session_c <- sweep(trials_session_c, 1, sdev, "/")
         }
 
-        data_clean[[session_i]] <- trials_session_c
+        data_clean[[session_i]] <- trials_session_c  # Note: remove trials by resampled idx, not here
 
       }
 
@@ -232,8 +246,8 @@ allres <-
         projs <- mfutils::enlist(rois)
         for (roi_i in seq_along(rois)) {
 
-          print(paste("Now processing", task_val, "task for subject", subj_val, wave_val,
-            "in region", roi_i, ":", rois[[roi_i]]))
+          print(paste("Testing on", task_val, test, "for subject", subj_val, wave_val,
+            "region", roi_i, ":", rois[[roi_i]]))
 
           ## extract roi_i for each session
           data_clean_roi <- lapply(data_clean_rois, "[[", rois[roi_i])  ## list of matrices of vertex by trial
@@ -241,7 +255,7 @@ allres <-
           ## remove vertices with no BOLD variance
           is_good_vertex_session <- lapply(data_clean_roi, function(x) !is_equal(Var(x, 1, na.rm = TRUE), 0))
           is_good_vertex <- Reduce("&", is_good_vertex_session)  ## intersection
-          stopifnot(mean(is_good_vertex) > 1/4)  ## stop if less than 1/4 vertices in ROI do not have signal
+          stopifnot(mean(is_good_vertex) > 1/4)  ## stop if more than 1/4 vertices in ROI do not have signal
           data_clean_roi_goodverts <- lapply(data_clean_roi, function(x) x[is_good_vertex, ])
 
           ## data
@@ -316,10 +330,12 @@ allres <-
     },
 
     error = function(e) {
+      msg <- paste("Error in task", tasks[task_i],
+        "subject", subjs[subj_i], "wave", waves[wave_i], ":", e)
       print("")
-      print(e)
+      print(msg)
       print("")
-      list(NA)
+      list(msg)
     }
 
   )

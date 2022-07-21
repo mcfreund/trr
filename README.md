@@ -35,6 +35,8 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
 - Calculate the univariate or multivariate trial-level statistics for each parcel:
   - Run `code/spatial/univariate_means.R` to get the univariate statistics for each parcel (averaging across all voxels). The script will read the `errts_trials_target_epoch.RDS` files generated in the last step and save the results in `trial-means_schaefer2018_17_400_fsaverage5-parcel_resid-errts.csv` in the same folder.
   - Run `in/behav/write_behav_subjs.R` to generate trial-level behavioral data from `in/behav/orig/` to CSV files like `behavior-and-events_wave13_Stroop.csv` under `in/behav`.
+  - Run `code/spatial/multivariate_projections_within-task_cv-sessions.R` to generate univariate and multivariate statistics for reliability analysis. The script reads the behavior CSVs and outputs to a csv like `out/spatial/projections__stroop__rda__n_resamples100__divnorm_vertex__cv_allsess_wave12.csv`
+  - Recode "wave2/3" and "wave1/3" to "wave1/2" and gather all three CSVs by `code/spatial/gather_csvs.sh`
   - ~~Run `code/spatial/multivariate_projections_within-task.R` to get the multivariate statistics for each parcel (the output of the linear classifier with voxels as features). The script will also read the `errts_trials_target_epoch.RDS`, but it will save all results in a single `.csv` file in `out/spatial/` (e.g., `out/spatial/projections__stroop__rda_lambda_100__n_resamples100.csv`). The AUC of each classifier will be saved along with the trial-level statistics.~~
 - ~~Fit hierarchical models for the statistics:~~
   - ~~Warning: fitting the bayesian model is VERY SLOW and usually some jobs fail at the first run!~~

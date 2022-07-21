@@ -2,6 +2,8 @@
 #
 # Author: Michael Freund
 #
+# 07/21/2022: Fix a bug that fails to exclude trials with NAs
+#
 # Updated by Ruiqi Chen on 07/20/2022 for compatibility with wave13 & wave23
 
 library(here)
@@ -26,7 +28,7 @@ classes <- c("lo", "hi")  ## -, +
 task <- "Stroop"
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-do_waves <- c(1, 2)
+do_waves <- c(2, 3)
 subjs <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
 )
@@ -57,9 +59,9 @@ alltrials <- read_results(
 )
 bads_idx <- lapply(alltrials, function(x) which(is.na(rowSums(x))))  ## get list of bad trials
 bads <- data.table(
-  trial = unlist(bads_idx),
-  id = names(unlist(bads_idx))
-)
+  trial = stack(bads_idx)$value,
+  id = stack(bads_idx)$ind
+)  # unlist() will rename duplicate ids (when there're multiple bad trials in a session)
 #bads <- bads %>% tidyr::separate(id, c("wave", "task", "session", "subj"), sep = "_")
 
 if (task != "Stroop" | variable != "hilo_all") stop("This script is only for Stroop!")
@@ -100,6 +102,13 @@ resample_stroop <- function(nms, trials, n_resamples, resample_to) {
   trials_idx <- resample_idx(nms, n_resamples = n_resamples, resample_to = resample_to)
   ## convert index for trials into actual trial numbers.
   apply(trials_idx, 2, function(x) trials[x])
+}
+
+# Debugging
+if (FALSE) {
+  subj_nm <- "448347"
+  wave_nm <- "wave2"
+  session_nm <- "baseline"
 }
 
 res <- enlist(combo_paste(subjs, "__", waves, "__", sessions))
