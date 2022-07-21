@@ -1,6 +1,8 @@
 # Resamples trials stratified by confounding factors.
 #
 # Author: Michael Freund
+#
+# Updated by Ruiqi Chen on 07/20/2022 for compatibility with wave13 & wave23
 
 library(here)
 library(tidyr)
@@ -22,16 +24,21 @@ theme_set(theme_minimal(base_size = 14))
 variable <- "hilo_all"
 classes <- c("lo", "hi")  ## -, +
 task <- "Stroop"
-train <- c("proactive", "reactive")
-test <- c("baseline")
-subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-do_waves <- c(1, 2)
+do_waves <- c(2, 3)
+subjs <- switch(toString(do_waves),
+  "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
+)
+input_fname <- here("in", "behav",
+  paste0("behavior-and-events_wave", do_waves[1], do_waves[2], "_", task, ".csv")
+)
 n_cores <- 12
 n_resamples <- 100
 
-file_name <- here("out", "spatial", "trialidx_stroop_congruency.RDS")
+file_name <- here("out", "spatial",
+  paste0("trialidx_stroop_congruency_wave", do_waves[1], do_waves[2], ".RDS")
+)
 
 ## execute ----
 
@@ -55,9 +62,9 @@ bads <- data.table(
 )
 #bads <- bads %>% tidyr::separate(id, c("wave", "task", "session", "subj"), sep = "_")
 
-if (task != "Stroop" | variable != "hilo_all") stop("Only for Stroop!")
+if (task != "Stroop" | variable != "hilo_all") stop("This script is only for Stroop!")
 
-behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_Stroop.csv"), na.strings = c("", "NA"))
+behav <- fread(input_fname, na.strings = c("", "NA"))
 cols <- c("subj", "wave", "session", "run", "trial.num", "trialtype", "pc", "item", "color", "word")
 behav <- behav[wave %in% do_waves, ..cols]
 behav[, task := "Stroop"]

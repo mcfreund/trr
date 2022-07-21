@@ -49,7 +49,6 @@ variable <- "hilo_all"
 divnorm_vertex <- TRUE
 divnorm_trial <- FALSE
 demean_trial <- FALSE
-file_name_resamples <- here("out", "spatial", "trialidx_stroop_congruency.RDS")
 classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
 classifier <- "rda"  ## or "ridge"
@@ -57,34 +56,18 @@ shrinkage_factor_ridge <- 100
 shrinkage_factor_rda <- 0.25
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
-subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-do_waves <- c(1, 2)
 n_cores <- 6
-
-## read resampled trial indices
-resamples <- readRDS(here("out", "spatial", "trialidx_stroop_congruency.RDS"))
-n_resamples <- nrow(resamples[[1]])
-print(noquote(paste0("num resamples: ", n_resamples)))
-
-## out file name
-file_name <- switch(
-  grepl("^schafer", classifier) + 1,
-  paste0(
-    "projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples,
-    switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
-    switch(divnorm_trial + 1, "", "__divnorm_trial"),
-    switch(demean_trial + 1, "", "__demean_trial"),
-    "__cv_allsess.csv"
-    ), ## F
-  paste0(
-    "projections__stroop__", classifier, "__n_resamples", n_resamples,
-    switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
-    switch(divnorm_trial + 1, "", "__divnorm_trial"),
-    switch(demean_trial + 1, "", "__demean_trial"),
-    "__cv_allsess.csv"
-    )  ## TRUE
+do_waves <- c(2, 3)
+subjs <- switch(toString(do_waves),
+  "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
+)
+input_fname <- here("in", "behav",
+  paste0("behavior-and-events_wave", do_waves[1], do_waves[2], "_alltasks.csv")
+)
+file_name_resamples <- here("out", "spatial",
+  paste0("trialidx_stroop_congruency_wave", do_waves[1], do_waves[2], ".RDS")
 )
 
 ## atlas info and other constants
@@ -92,6 +75,20 @@ atlas <- get(atlas_nm)
 rois <- unique(atlas$key[[roi_col]])
 waves <- waves[do_waves]
 n_classes <- length(classes)
+
+## read resampled trial indices
+resamples <- readRDS(file_name_resamples)
+n_resamples <- nrow(resamples[[1]])
+print(noquote(paste0("num resamples: ", n_resamples)))
+
+## out file name
+file_name <- paste0(
+  "projections__stroop__", classifier, "__n_resamples", n_resamples,
+  switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
+  switch(divnorm_trial + 1, "", "__divnorm_trial"),
+  switch(demean_trial + 1, "", "__demean_trial"),
+  "__cv_allsess_wave", do_waves[1], do_waves[2], ".csv"
+)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
@@ -106,15 +103,15 @@ alltrials <- read_results(
 ## read trial data:
 ## behav$hilo indicates high-demand (incongruent) vs low-demand (congruent) for only bias trialtypes
 ## behav$hilo_all indicates high-demand (incongruent) vs low-demand (congruent) for both bias and pc50 trialtypes
-behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_alltasks.csv"), na.strings = c("", "NA"))
+behav <- fread(input_fname, na.strings = c("", "NA"))
 cols <- c("subj", "wave", "task", "session", "trialtype", variable, "trialnum")
 behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols]
 
 ## for dev/interactive use:
 if (FALSE) {
-  subj_i <- which(subjs == "448347")
+  subj_i <- which(subjs == "DMCC8760894")
   task_i <- 1
-  wave_i <- 2
+  wave_i <- 1
   session_i <- 1
   roi_i <- 1
 }
@@ -158,8 +155,8 @@ allres <-
       names(trials) <- c("baseline", "proactive", "reactive")
 
       ## get good trials, class lables, and regress nuisance variance
-      data_clean <- enlist(sessions)
-      trial_idxs <- enlist(sessions)
+      data_clean <- mfutils::enlist(sessions)
+      trial_idxs <- mfutils::enlist(sessions)
       for (session_i in seq_along(trials)) {
 
         session_val <- sessions[session_i]
@@ -223,7 +220,7 @@ allres <-
       }
 
 
-      projs_all <- enlist(sessions)
+      projs_all <- mfutils::enlist(sessions)
       for (test in sessions) {
 
         train <- setdiff(sessions, test)
@@ -232,7 +229,7 @@ allres <-
         names(resamples_train) <- train
 
         ## loop over ROIs and train/test models:
-        projs <- enlist(rois)
+        projs <- mfutils::enlist(rois)
         for (roi_i in seq_along(rois)) {
 
           print(paste("Now processing", task_val, "task for subject", subj_val, wave_val,
