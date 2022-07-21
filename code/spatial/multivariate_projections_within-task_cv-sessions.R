@@ -58,7 +58,7 @@ atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-n_cores <- 6
+n_cores <- 18
 do_waves <- c(2, 3)
 subjs <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all

@@ -4,7 +4,7 @@ library(here)
 library(purrr)
 
 source(here("code", "_constants.R"))
-do_waves <- c(1, 3)
+do_waves <- c(2, 3)
 subj_list <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_all, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
 )
@@ -12,18 +12,18 @@ subj_list <- switch(toString(do_waves),
 ## read and combine:
 
 behav_wave1 <- list(
-  Axcpt  = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_axcpt_2021-09-13.csv")),
-  Cuedts = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_cuedts_2021-09-13.csv")),
-  Stern  = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_sternberg_2021-09-13.csv")),
-  Stroop = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_stroop_2021-09-13.csv"))
+  Axcpt  = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_axcpt_2022-07-20.csv")),
+  Cuedts = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_cuedts_2022-07-20.csv")),
+  Stern  = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_sternberg_2022-07-20.csv")),
+  Stroop = fread(here("in", "behav", "orig", "dmcc2_behavior-and-events_stroop_2022-07-20.csv"))
 )
 
 
 behav_wave2 <- list(
-  Axcpt  = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_axcpt_2021-09-23.csv")),
-  Cuedts = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_cuedts_2021-09-23.csv")),
-  Stern  = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_sternberg_2021-09-23.csv")),
-  Stroop = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_stroop_2021-09-23.csv"))
+  Axcpt  = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_axcpt_2022-07-20.csv")),
+  Cuedts = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_cuedts_2022-07-20.csv")),
+  Stern  = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_sternberg_2022-07-20.csv")),
+  Stroop = fread(here("in", "behav", "orig", "dmcc3_behavior-and-events_stroop_2022-07-20.csv"))
 )
 
 

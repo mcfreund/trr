@@ -26,7 +26,7 @@ classes <- c("lo", "hi")  ## -, +
 task <- "Stroop"
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-do_waves <- c(2, 3)
+do_waves <- c(1, 2)
 subjs <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
 )
