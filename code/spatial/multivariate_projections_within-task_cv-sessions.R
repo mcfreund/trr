@@ -14,7 +14,8 @@
 #  This should be fixed after the update of `resampleing_trials.r`.
 #
 # 2. Divide by 0 error when normalizing vertices with no fluctuation.
-#  This should be fixed by the update in `sdev <- sqrt(Var(eps, 2)) + 1e-6`.
+#  For `divnorm_vertex` it was fixed by replacing the 0s in `sdev` with 1e-6.
+#  For `divnorm_trial` it was fixed by replacing standard `scale()` with `myscale()`
 #
 # 07/20/2022 update:
 #
@@ -136,6 +137,16 @@ ldf <- function(object, newdata, class_names = c("hi", "lo")) {
   newdata %*% w
 }
 
+## Same as base::scale() but output 0s instead of NAs for zero variance inputs
+myscale <- function(x, center = TRUE, scale = TRUE) {
+  if (center & scale) {
+    sc <- apply(x, 2, sd, na.rm = TRUE)
+    sc[sc == 0] <- 1e-6
+  } else {
+    sc <- scale
+  }
+  scale(x, center = center, scale = sc)
+}
 
 ## for dev/interactive use:
 if (FALSE) {
@@ -214,7 +225,8 @@ allres <-
         if (divnorm_vertex) {
           ## divisive normalize each vertex by residual sdev over trials? (univariate prewhiten)
           eps <- resid(.lm.fit(x = indicator(behav_session$trialtype[idx]), y = t(trials_session_c[, idx])))
-          sdev <- sqrt(Var(eps, 2)) + 1e-6  # To prevent NaN for vectices with no BOLD
+          sdev <- sqrt(Var(eps, 2))
+          sdev[sdev == 0] <- 1e-6  # To prevent NAs for vectices with no fluctuation
           trials_session_c <- sweep(trials_session_c, 1, sdev, "/")
         }
 
@@ -229,7 +241,7 @@ allres <-
       if (divnorm_trial | demean_trial) {
         for (session_i in seq_along(trials)) {
           data_clean_rois[[session_i]] <-
-            lapply(data_clean_rois[[session_i]], scale, center = demean_trial, scale = divnorm_trial)
+            lapply(data_clean_rois[[session_i]], myscale, center = demean_trial, scale = divnorm_trial)
         }
       }
 
