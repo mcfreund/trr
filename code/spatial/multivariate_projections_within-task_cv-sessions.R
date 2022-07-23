@@ -14,8 +14,10 @@
 #  This should be fixed after the update of `resampleing_trials.r`.
 #
 # 2. Divide by 0 error when normalizing vertices with no fluctuation.
-#  For `divnorm_vertex` it was fixed by replacing the 0s in `sdev` with 1e-6.
-#  For `divnorm_trial` it was fixed by replacing standard `scale()` with `myscale()`
+#  We did not prevent this, since zero-fluctuation vertices will be removed later
+#  (search for `is_good_vertex`) even if they become all NAs.
+#
+# And we check for any remaining NAs (e.g., due to `divnorm_trials`) before training.
 #
 # 07/20/2022 update:
 #
@@ -137,16 +139,6 @@ ldf <- function(object, newdata, class_names = c("hi", "lo")) {
   newdata %*% w
 }
 
-## Same as base::scale() but output 0s instead of NAs for zero variance inputs
-myscale <- function(x, center = TRUE, scale = TRUE) {
-  if (center & scale) {
-    sc <- apply(x, 2, sd, na.rm = TRUE)
-    sc[sc == 0] <- 1e-6
-  } else {
-    sc <- scale
-  }
-  scale(x, center = center, scale = sc)
-}
 
 ## for dev/interactive use:
 if (FALSE) {
@@ -225,12 +217,11 @@ allres <-
         if (divnorm_vertex) {
           ## divisive normalize each vertex by residual sdev over trials? (univariate prewhiten)
           eps <- resid(.lm.fit(x = indicator(behav_session$trialtype[idx]), y = t(trials_session_c[, idx])))
-          sdev <- sqrt(Var(eps, 2))
-          sdev[sdev == 0] <- 1e-6  # To prevent NAs for vectices with no fluctuation
+          sdev <- sqrt(Var(eps, 2))  # Vertices with no BOLD will be removed by `is_good_vertex` later
           trials_session_c <- sweep(trials_session_c, 1, sdev, "/")
         }
 
-        data_clean[[session_i]] <- trials_session_c  # Note: remove trials by resampled idx, not here
+        data_clean[[session_i]] <- trials_session_c  # Note: remove bad trials by resampled idx, not here
 
       }
 
@@ -241,7 +232,7 @@ allres <-
       if (divnorm_trial | demean_trial) {
         for (session_i in seq_along(trials)) {
           data_clean_rois[[session_i]] <-
-            lapply(data_clean_rois[[session_i]], myscale, center = demean_trial, scale = divnorm_trial)
+            lapply(data_clean_rois[[session_i]], scale, center = demean_trial, scale = divnorm_trial)
         }
       }
 
@@ -289,6 +280,12 @@ allres <-
               idx2 <- resamples_train[[2]][i, ]
               X <- rbind(l_train[[1]][idx1, ], l_train[[2]][idx2, ])
               y <- rownames(X)
+
+              if (any(is.na(X))) {
+                stop(paste("NA found in subject", subj_val,
+                  wave_val, "session", session_val))
+              }
+
               fit_ridge <- mda::fda(y ~ X, method = gen.ridge, lambda = shrinkage_factor_ridge)
               fit_rda <- klaR::rda(x = X, grouping = y, gamma = shrinkage_factor_rda, lambda = 1)
               return(list(ridge = fit_ridge, rda = fit_rda))
