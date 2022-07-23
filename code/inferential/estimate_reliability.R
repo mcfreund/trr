@@ -1,8 +1,6 @@
-## TODO
-## add logic for running on both univariate and multivariate
-## - i/o filenames
-
-# Hierarchical modeling for the statistics obtained through multivariate method
+# Hierarchical modeling for test-retest reliability
+#
+# 07/23/2022 update: now using only `brms` and fitting three different models.
 #
 # Author: Ruiqi Chen
 #
@@ -57,20 +55,22 @@ source(here("code", "_funs.R"))
 
 n_core_brm <- 4  # Number of cores for parallelization within brm()
 roi_idx <- core32  ## which ROIs to use
-subjs <- subjs_wave12_complete
-do_waves <- c(1, 2)
 n_cores <- 20
 file_refit <- "on_change"  ## "never", "always", see help(brm)
 tasks <- "Stroop"
 sessions <- c("baseline", "proactive", "reactive")
-#response_names <- c("mv", "uv")
-response_names <- c("mv")
-model_names <- c("full", "no_lscov_symm", "no_lscov")
+response_names <- c("rda")
+vterm <- switch(response_names[[1]],
+  rda = "value.rda",
+  ridge = "value.ridge",
+  uv = "uv"
+)
+model_names <- c("full", "no_lscov", "no_lscov_symm")
 
 
 ## Input from ./code/spatial/multi...task.R:
 fname <- here("out", "spatial",
-  "projections__stroop__rda_lambda_100__n_resamples100__divnorm_vertex__cv_allsess.csv"
+  "projections__stroop__rda__n_resamples100__divnorm_vertex__cv_allsess.csv"
 )
 
 # Atlas
@@ -92,10 +92,10 @@ out_path <- here("out", "inferential", atlas_nm)
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
 
-# Select part of the ROIs
 
 ###################### Load and prepare data #########################
 
+# Select part of the ROIs
 d <- read_csv(fname) %>% filter(roi %in% .env$rois)
 
 
@@ -103,7 +103,8 @@ d <- read_csv(fname) %>% filter(roi %in% .env$rois)
 
 d_wide <-
   d %>%
-  pivot_wider(id_cols = c(trial, subj, test_session, task, wave, variable), names_from = roi, values_from = value) %>%
+  pivot_wider(id_cols = c(trial, subj, test_session, task, wave, variable),
+    names_from = roi, values_from = .env$vterm) %>%
   mutate(
     ## coerce to factor:
     variable  = factor(variable, c("lo", "hi"), ordered = TRUE),
@@ -120,7 +121,7 @@ d_wide <-
     hi_wave1 = (variable == "hi") * mean_wave1,
     lo_wave2 = (variable == "lo") * mean_wave2,
     hi_wave2 = (variable == "hi") * mean_wave2
-    )
+  )
 
 # Fix naming problems with brms() formulas
 input_for_bayes <- d_wide %>%
@@ -134,13 +135,20 @@ rois_bayes <- gsub("17Networks", "Networks", rois)
 
 needs_refit <- enlist(combo_paste(model_names, "__", response_names, "__", sessions))
 
+# Debugging
+if (FALSE) {
+  session <- "baseline"
+  model_name <- "no_lscov_symm"
+  response_name <- "rda"
+}
+
 for (session in sessions) {
   for (model_name in model_names) {
     for (response_name in response_names) {
 
       input_for_bayes_i <- input_for_bayes %>% filter(test_session == session)
 
-      ## get formulas and  out file prefix
+      ## get formulas and out file prefix
       model_info <- get_model_info(model_name = model_name, response_name = response_name, session = session)
       formulas <-
         lapply(
@@ -152,12 +160,29 @@ for (session in sessions) {
       ## check:
       print(get_prior(brmsformula(formulas[[1]]), input_for_bayes, family = student()))
       if (FALSE) {
+        t0 <- Sys.time()
         fit_check <- brm(
           formulas[[1]],
-          input_for_bayes %>% filter(test_session == "baseline"),
+          input_for_bayes_i,
           cores = n_core_brm,
-          family = student()
+          family = student(),
+          file = here("out", "spatial", "tmp")  # To get a sense of the size
           )
+        t1 <- Sys.time()
+        add_criterion(
+          fit_check,
+          criterion = c("loo", "waic", "bayes_R2"),
+          file = here("out", "spatial", "tmp")
+        )
+        t2 <- Sys.time()
+        if (TRUE) {
+          cat(paste("Elapsed time to train a", model_name, "model: "))
+          print(t1 - t0)
+          cat("Elapsed time for evaluating: ")
+          print(t2 - t1)
+          cat("Total time: ")
+          print(t2 - t0)
+        }
       }
 
       print(paste0(" --------------- starting ", model_name, " ", response_name, " ", session, " --------------- "))
@@ -214,7 +239,7 @@ for (session in sessions) {
 print(needs_refit)
 
 
-# file_names <- 
+# file_names <-
 #   paste0(
 #     file.path(out_path, rois[10],
 #     c(
@@ -227,4 +252,3 @@ print(needs_refit)
 #     )
 # fits <- lapply(file_names, readRDS)
 # fits
-
