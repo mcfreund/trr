@@ -138,7 +138,7 @@ needs_refit <- enlist(combo_paste(model_names, "__", response_names, "__", sessi
 # Debugging
 if (FALSE) {
   session <- "baseline"
-  model_name <- "no_lscov_symm"
+  model_name <- "full"
   response_name <- "rda"
 }
 
@@ -197,7 +197,7 @@ for (session in sessions) {
 
             expr = {
               out_subdir <- file.path(out_path, x)
-              if (!dir.exists(out_subdir)) dir.create(out_subdir)
+              if (!dir.exists(out_subdir)) dir.create(out_subdir, recursive = TRUE)
               out_file_name <- file.path(out_subdir, model_info$model_prefix)
               fit <- brm(
                 formula = formulas[[x]],

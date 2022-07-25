@@ -40,6 +40,6 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
 - Fit hierarchical models for the statistics:
   - Warning: fitting the bayesian model is VERY SLOW and usually some jobs fail at the first run!
   - Run `code/inferential/estimate_reliability.R` to fit the models. The fitted models will be saved to `out/inferential/schaefer2018_17_400_fsaverage5/NAMES_OF_ROI/`.
-    - Each model is about 36M
-    - It takes about an hour to train a full model
-    - We have 3 test_session \* 3 response_name \* 32 ROIs = 288 models for each of the three model types.
+    - Each model is about 36M and requires about an hour to train (with 4 chains on 4 cores) without further parallelization.
+    - With `mclapply()` over the ROIs we can fit 32 models in 17.6 hours. 
+    - Currently, we only focus on "baseline" session and compare between three model types and two response types ("uv" and "rda")
