@@ -59,7 +59,7 @@ n_cores <- 20
 file_refit <- "on_change"  ## "never", "always", see help(brm)
 tasks <- "Stroop"
 sessions <- c("baseline", "proactive", "reactive")
-response_names <- c("rda")
+response_names <- c("ridge")  # Note: currently must be c("rda"), c("ridge") or c("uv")
 vterm <- switch(response_names[[1]],
   rda = "value.rda",
   ridge = "value.ridge",
@@ -139,7 +139,7 @@ needs_refit <- enlist(combo_paste(model_names, "__", response_names, "__", sessi
 if (FALSE) {
   session <- "baseline"
   model_name <- "full"
-  response_name <- "rda"
+  response_name <- response_names[[1]]
 }
 
 for (session in sessions) {

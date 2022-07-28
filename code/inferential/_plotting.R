@@ -2,6 +2,8 @@
 #
 # Author: Ruiqi Chen
 #
+# 07/28/2022 update: now using `prep_mdl()` and `mdl2sum()` to prepare data.
+#
 # When being sourced, this script provides a function `brain_plot()` that can plot
 # some statistics for each parcel over the brain. Please refer to the comments above
 # the definition of `brain_plot()` for its usage.
@@ -23,6 +25,10 @@ library(ggsegExtra)
 library(ggsegSchaefer)
 library(ggsegGlasser)
 library(mfutils)
+library(brms)
+
+# Get file naming function
+source(here::here("code", "_funs.R"))
 
 # ROIs
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
@@ -48,7 +54,7 @@ theme_surface <- list(
   )
 )
 
-# brain_plot(): Plot a column in a tibble onto the brain
+# **brain_plot(): Plot a column in a tibble onto the brain**
 #
 # Inputs:
 #  - `df`: a tibble, the names of the parcels should be in `df$region`
@@ -94,55 +100,162 @@ brain_plot <- function(df, stat_term = "tstat", eff_term = NULL, eff = NULL,
   return(fig)
 }
 
+# **vec2sum() - Summarize sampling statistics**
+#
+# Inputs:
+# - `dat`: a vector or a dataframe column
+# - `term_name`, `group_name`: names for `Term` and `Grouping`
+# - `alpha`: determining the percentile
+# - `one-sided`: whether to use `alpha` or `alpha`/2 probability. Default is the former!
+#
+# Output: a tibble()
+vec2sum <- function(dat, term_name = NA, group_name = NA, alpha = .05, one_sided = TRUE) {
+  if (one_sided) ci <- c(alpha, 1 - alpha) else ci <- c(alpha / 2, 1 - alpha / 2)
+  res <- tibble(
+    Term = term_name, Estimate = mean(dat), `Est.Error` = sd(dat),
+    `CI.Lower` = quantile(dat, probs = ci[[1]]),
+    `CI.Upper` = quantile(dat, probs = ci[[2]]),
+    `Q.Lower` = ci[[1]], `Q.Upper` = ci[[2]], Grouping = group_name
+  )
+}
+
+#  **get_trr() - Calculate test-retest reliability**
+get_trr <- function(mdl, alpha = .05) {
+  if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
+    trr <- VarCorr(mdl, summary = FALSE)$subj$cor[, "hilo_wave1", "hilo_wave2"]
+  } else {
+    mu <- ranef(mdl, summary = FALSE)$subj
+    mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"]
+    mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
+    trr <- rep(0, dim(mu)[1])
+    for (ii in seq_along(trr)) trr[ii] <- cor(mu_stroop1[ii, ], mu_stroop2[ii, ])
+  }
+  vec2sum(trr, term_name = "TRR", group_name = "subj", alpha = alpha)
+}
+
+# **get_norm_sd() - Calculate the relative contribution of subject-level variations**
+get_norm_sd <- function(mdl, alpha = .05) {
+  data_nm <- toString(mdl$formula[[1]][[2]])
+  denom <- sd(mdl$data[[data_nm]])  # "Scale" of all input data
+  if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
+    samples <- as.data.frame(mdl)
+    sd_hilos <- list(
+      sd_hilo_wave1 = samples$sd_subj__hilo_wave1,
+      sd_hilo_wave2 = samples$sd_subj__hilo_wave2,
+      sd_hilo = (samples$sd_subj__hilo_wave1 + samples$sd_subj__hilo_wave2) / 2
+    )
+  } else {
+    mu <- ranef(mdl, summary = FALSE)$subj
+    mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"] # 4000*27
+    mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
+    mu_stroop <- (mu_stroop1 + mu_stroop2) / 2
+    sd_hilos <- list(
+      sd_hilo_wave1 = apply(mu_stroop1, 1, sd),
+      sd_hilo_wave2 = apply(mu_stroop2, 1, sd),
+      sd_hilo = apply(mu_stroop, 1, sd)
+    )
+  }
+  sd_hilos_norm <- list(norm_sd_hilo_wave1 = sd_hilos$sd_hilo_wave1 / denom,
+    norm_sd_hilo_wave2 = sd_hilos$sd_hilo_wave2 / denom,
+    norm_sd_hilo = sd_hilos$sd_hilo / denom)
+  bind_rows(lapply(sd_hilos_norm, vec2sum, group_name = "subj",
+    alpha = alpha), .id = "Term")
+}
+
+# **mdl2sum() - Summarize statistics of interest from a model**
+#
+# Input:
+# - a `brmsfit()` model
+# - `model_name`: "full", "no_lscov", or "no_lscov_symm"
+# - `response_name`: "rda", "uv", or "ridge"
+# - `session`: "baseline", "reactive", "proactive"
+# - alpha level (by default 0.05)
+#
+# Output: a tibble with the following terms:
+# - `model`, `response`, `session`
+# - `Term`, `Grouping`, `Estimate`, `Est.Error`
+# - `tstat`: it's just `Estimate` / `Est.Error`
+# - `CI.Lower` and `CI.Upper`: lower and upper bound of the credible interval defined by `alpha`.
+# - `Q.Lower` and `Q.upper`: indicating the percentile for `CI.Lower` and `CI.Upper`
+mdl2sum <- function(mdl, roi_val = NA, roi_term = "region", alpha = .05) {
+
+  # Loo and WAIC
+  res <- bind_rows(as_tibble(mdl$criteria$loo$estimates, rownames = "Term"),
+                  as_tibble(mdl$criteria$waic$estimates, rownames = "Term")) %>%
+    rename(`Est.Error` = SE)
+
+  # Bayes R2
+  r2 <- as_tibble(rstantools::bayes_R2(mdl, probs = c(alpha, 1 - alpha))) %>%
+    mutate(Term = "Bayes_R2", `Q.Lower` = alpha, `Q.Upper` = 1 - alpha)
+  # Replace Qx.xx with easy-to-handle names
+  ci_term_ind <- grep("^Q[0-9.]+$", names(r2))
+  stopifnot(length(ci_term_ind) == 2)  # Throw an error if no unique match found
+  names(r2)[ci_term_ind] <- c("CI.Lower", "CI.Upper")
+
+  res <- bind_rows(res, r2)
+
+  # Population-level high-low contrast
+  if ("sd_subj__hilo_wave1" %in% variables(mdl)) {  # "no_lscov_symm"
+    hypos <- c(hilo_wave1 = "hilo_wave1 > 0", hilo_wave2 = "hilo_wave2 > 0")
+  } else {
+    hypos <- c(hilo_wave1 = "hi_wave1 - lo_wave1 > 0",
+      hilo_wave2 = "hi_wave2 - lo_wave2 > 0")
+  }
+  hypo_res <- as_tibble(hypothesis(mdl, hypos, alpha = alpha)$hypothesis) %>%
+    mutate(Term = names(hypos), `Q.Lower` = alpha, `Q.Upper` = 1 - alpha) %>%
+    select(-c(`Evid.Ratio`, `Post.Prob`, Star, Hypothesis))
+  res <- bind_rows(res, hypo_res)
+
+  # Test-retest reliability
+  res <- bind_rows(res, get_trr(mdl, alpha = alpha))
+
+  # Subject-level (normalized) variation of high-low contrast
+  res <- bind_rows(res, get_norm_sd(mdl, alpha = alpha))
+
+  # ROI term
+  res[[roi_term]] <- roi_val
+
+  res
+}
+
+# **prep_mdl() - Extract statistics from the saved models**
+#
+# Inputs: `model_names`, `response_names`, `sessions`, three vectors (see estimate_reliability.R)
+# Output: `res`, a list named by "modelname__responsename__session"
+prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
+  sessions = c("baseline"), in_path = here::here("out", "inferential", atlas_nm)) {
+  res <- mfutils::enlist(mfutils::combo_paste(model_names, "__", response_names,
+    "__", sessions))
+  for (model_name in model_names) {
+    for (response_name in response_names) {
+      for (session in sessions) {
+        model_info <- get_model_info(model_name, response_name, session)
+        rds_name <- paste0(model_info$model_prefix, ".rds")
+        files <- list.files(in_path, pattern = rds_name, full.names = T,
+          recursive = T)
+        curr_res <- bind_rows(lapply(files, function(f) {
+          mdl <- readRDS(f)
+          mdl_region <- basename(dirname(f))
+          mdl2sum(mdl, roi_val = mdl_region)
+        }))
+        res[[paste0(model_name, "__", response_name, "__", session)]] <- curr_res
+      }
+    }
+  }
+  res
+}
+
 
 # Main function when running this script directly
 if (sys.nframe() == 0) {
 
   library(here)
-  library(readr)
 
   # Data
-  mv_brm_fname <- "multivariate_bayesian_model.csv"  # Effects extracted by pull_bayes_ef()
-  uv_brm_fname <- "univariate_bayesian_model.csv"
   mv_mcmc <- "mv_bayes_MCMC_coefs_fda.rds"  # Coefficients from every MCMC sample
   uv_mcmc <- "uv_bayes_MCMC_coefs.rds"
   mv_full <- "mv_bayes_MCMC_coefs_schafer_full.rds"  # For "schafer_full"
   mv_diag <- "mv_bayes_MCMC_coefs_schafer_diag.rds"  # For "schafer_diag"
-
-
-  ############################ lme4 Results #################################
-
-  # fname1 <- "multivariate_linear_model.csv"
-  # b1 <- read_csv(here("out", "spatial", fname1)) %>%
-  #   mutate(term = ifelse(term == "hilo_alllo", "hilo_allhi", term)) %>%
-  #   mutate(b = ifelse(term == "hilo_allhi", -b, b),
-  #     tstat = ifelse(term == "hilo_allhi", -tstat, tstat))
-  # f1 <- brain_plot(b1, eff_term = "term", eff = "hilo_allhi", lim = c(-6, 12),
-  #   fig_title = "multivariate")
-
-  # fname2 <- "univariate_linear_model.csv"
-  # b2 <- read_csv(here("out", "spatial", fname2))
-  # f2 <- brain_plot(b2, eff_term = "term", eff = "hilo_allhi", lim = c(-6, 12),
-  #   fig_title = "univariate")
-
-  # f3 <- brain_plot(b1, eff_term = "term", eff = "wavewave2", lim = c(-2, 2),
-  #   fig_title = "multivariate")
-  # f4 <- brain_plot(b2, eff_term = "term", eff = "wavewave2", lim = c(-2, 2),
-  #   fig_title = "univariate")
-  # f3 + f4 + plot_annotation(title = "t-statistics for wave effect in Stroop baseline")
-  # ggsave(here("out", "spatial", "wave.png"))
-
-
-  ############################ brms effects #################################
-
-  # Summarize sampling statistics
-  vec2sum <- function(dat, term_name = NA, group_name = NA, alpha = .05) {
-    ci <- c(alpha / 2, 1 - alpha / 2)
-    as_tibble(list(Term = term_name, Grouping = group_name,
-      Estimate = mean(dat), `Est.Error` = sd(dat), tstat = mean(dat) / sd(dat),
-      CI_L = quantile(dat, probs = ci[[1]]),
-      CI_U = quantile(dat, probs = ci[[2]])))
-  }
 
   # Preprocess the MCMC coefficients saved in .rds file
   prep_dat_rds <- function(fpath) {
@@ -239,116 +352,4 @@ if (sys.nframe() == 0) {
     title = "Test-retest correlation of hi-lo contrast in Stroop baseline")
   ggsave(here("out", "spatial", "hilo_trr.png"))
 
-  # Preprocess the effects saved in a csv by pull_bayes_ef in the training code
-  prep_dat_csv <- function(fpath) {
-
-    tib <- read_csv(fpath) %>%
-      select(!`...1`)
-
-    # Change lo-hi main effect to hi-lo
-    tib <- tib %>%
-      mutate(nQ975 = -`Q2.5`, nQ25 = -`Q97.5`) %>%
-      mutate(Estimate = if_else(Term == "hilo_alllo" & is.na(Grouping), -Estimate, Estimate)) %>%
-      mutate(`Q2.5` = if_else(Term == "hilo_alllo" & is.na(Grouping), nQ25, `Q2.5`)) %>%
-      mutate(`Q97.5` = if_else(Term == "hilo_alllo" & is.na(Grouping), nQ975, `Q97.5`)) %>%
-      mutate(Term = ifelse(Term == "hilo_alllo", "hilo_allhi", Term)) %>%
-      select(!c(nQ25, nQ975))
-
-    # Add normalized effects: (hilo|subj) / res, (wave|subj) / res, res/data, abs(wave)/data, hilo/data
-    norm_tib <- tib %>%
-      unite(Term_Grouping, c(Term, Grouping), sep = "|", na.rm = TRUE) %>%
-      pivot_wider(id_cols = c(region, Term_Grouping), names_from = Term_Grouping, values_from = Estimate) %>%
-      mutate(
-        `wavewave2_norm|subj` = `wavewave2|subj` / Residual,
-        `hilo_allhi_norm|subj` = `hilo_allhi|subj` / Residual,
-        Residual_norm = Residual / Data_sd,
-        wavewave2_abs_norm = abs(wavewave2) / Data_sd,
-        hilo_allhi_norm = abs(hilo_allhi) / Data_sd
-      ) %>%
-      select(region, contains("norm")) %>%
-      pivot_longer(!region, names_to = "Term_Grouping", values_to = "Estimate") %>%
-      separate(Term_Grouping, c("Term", "Grouping"), sep = "\\|", fill = "right")
-
-    tib <- bind_rows(tib, norm_tib) %>%
-      arrange(region, Grouping, Term)
-
-    return(tib)
-  }
-  uv_dat <- prep_dat_csv(here("out", "spatial", uv_brm_fname))
-  mv_dat <- prep_dat_csv(here("out", "spatial", mv_brm_fname))
-
-  # Compute the t-statistics (by default all fixed effects including residual)
-  b2t <- function(x, eff = NULL, grp = NA) {
-    if (!is.null(eff)) x <- filter(x, Term %in% .env$eff)
-    if (!is.null(grp)) x <- filter(x, Grouping %in% .env$grp)
-    x %>%
-      filter(!is.na(`Est.Error`)) %>%
-      mutate(tstat = Estimate / `Est.Error`)
-  }
-
-  # Fixed effect of hilo (t-statistics)
-  clim <- NULL  # Different scale, since mv's main effect should be generally >= 0
-  f1 <- brain_plot(b2t(uv_dat, "hilo_allhi"), lim = clim, fig_title = "univariate")
-  f2 <- brain_plot(b2t(mv_dat, "hilo_allhi"), lim = clim, fig_title = "multivariate")
-  f1 + f2 + plot_annotation(
-    title = "t statistics for the fixed effect of hi-lo in Stroop baseline")
-  ggsave(here("out", "spatial", "hilo_fixed_t.png"))
-
-  # Fixed effect of wave (t-statistics)
-  clim <- c(0, 2.6)
-  f1 <- brain_plot(mutate(b2t(uv_dat, "wavewave2"), tstat = abs(tstat)), lim = clim, fig_title = "univariate")
-  f2 <- brain_plot(mutate(b2t(mv_dat, "wavewave2"), tstat = abs(tstat)), lim = clim, fig_title = "multivariate")
-  f1 + f2 + plot_annotation(
-    title = "Magnitude of t statistics for the fixed effect of wave in Stroop baseline")
-  ggsave(here("out", "spatial", "wave_fixed_t_abs.png"))
-
-  # Trial-level error relative to the scale of uni- or multi-variate statistics
-  clim <- c(0.97, 1.01)
-  f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "Residual_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "Residual_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
-  f1 + f2 + plot_annotation(
-    title = "Trial-level error relative to the scale of the input sd(y) in Stroop baseline")
-  ggsave(here("out", "spatial", "error_norm.png"))
-
-  # Magnitude of the fixed effect of hi-lo contrast relative to the input scale
-  clim <- c(0, 0.5)
-  f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "hilo_allhi_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "hilo_allhi_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
-  f1 + f2 + plot_annotation(
-    title = "Fixed effect of hi-lo relative to the scale of the input sd(y) in Stroop baseline")
-  ggsave(here("out", "spatial", "hilo_fixed_norm.png"))
-
-  # Magnitude of the fixed effect of wave relative to the input scale
-  clim <- c(0, 0.11)
-  f1 <- brain_plot(filter(uv_dat, is.na(Grouping), Term == "wavewave2_abs_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f2 <- brain_plot(filter(mv_dat, is.na(Grouping), Term == "wavewave2_abs_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
-  f1 + f2 + plot_annotation(
-    title = "Magnitude of the fixed effect of wave relative to the scale of the input sd(y) in Stroop baseline")
-  ggsave(here("out", "spatial", "wave_fixed_norm.png"))
-
-  # Random effect of hilo relative to trial-level error (the residual)
-  clim <- c(0, 0.35)
-  f_uv_hilo <- brain_plot(filter(uv_dat, Grouping == "subj", Term == "hilo_allhi_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f_mv_hilo <- brain_plot(filter(mv_dat, Grouping == "subj", Term == "hilo_allhi_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
-  f_uv_hilo + f_mv_hilo + plot_annotation(
-    title = "Effect of (hi_lo|subj) relative to trial-level error in Stroop baseline")
-  ggsave(here("out", "spatial", "hilo_norm.png"))
-
-  # Random effect of wave relative to trial-level error (the residual)
-  clim <- c(0, 0.11)
-  f_uv_wave <- brain_plot(filter(uv_dat, Grouping == "subj", Term == "wavewave2_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "univariate")
-  f_mv_wave <- brain_plot(filter(mv_dat, Grouping == "subj", Term == "wavewave2_norm"),
-    stat_term = "Estimate", lim = clim, fig_title = "multivariate")
-  f_uv_wave + f_mv_wave + plot_annotation(
-    title = "Effect of (wave|subj) relative to trial-level error in Stroop baseline")
-  ggsave(here("out", "spatial", "wave_norm.png"))
 }
