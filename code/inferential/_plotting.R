@@ -2,6 +2,8 @@
 #
 # Author: Ruiqi Chen
 #
+# To-do: consider using `posterior()` package to summarize results
+#
 # 07/28/2022 update: now using `prep_mdl()` and `mdl2sum()` to prepare data.
 #
 # When being sourced, this script provides a function `brain_plot()` that can plot
@@ -106,7 +108,7 @@ brain_plot <- function(df, stat_term = "tstat", eff_term = NULL, eff = NULL,
 # - `dat`: a vector or a dataframe column
 # - `term_name`, `group_name`: names for `Term` and `Grouping`
 # - `alpha`: determining the percentile
-# - `one-sided`: whether to use `alpha` or `alpha`/2 probability. Default is the former!
+# - `one-sided`: whether to use `alpha` or `alpha`/2 probability. Default is TRUE!
 #
 # Output: a tibble()
 vec2sum <- function(dat, term_name = NA, group_name = NA, alpha = .05, one_sided = TRUE) {
@@ -120,44 +122,44 @@ vec2sum <- function(dat, term_name = NA, group_name = NA, alpha = .05, one_sided
 }
 
 #  **get_trr() - Calculate test-retest reliability**
+#
+# The reliability is calculated by the correlation of estimated hi-lo contrast
+# for each subject in each posterior sample, then summarized across all samples.
 get_trr <- function(mdl, alpha = .05) {
+  mu <- ranef(mdl, summary = FALSE)$subj
   if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
-    trr <- VarCorr(mdl, summary = FALSE)$subj$cor[, "hilo_wave1", "hilo_wave2"]
+    mu_stroop1 <- mu[, , "hilo_wave1"]
+    mu_stroop2 <- mu[, , "hilo_wave2"]
   } else {
-    mu <- ranef(mdl, summary = FALSE)$subj
     mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"]
     mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
-    trr <- rep(0, dim(mu)[1])
-    for (ii in seq_along(trr)) trr[ii] <- cor(mu_stroop1[ii, ], mu_stroop2[ii, ])
   }
+  trr <- rep(0, dim(mu)[1])
+  for (ii in seq_along(trr)) trr[ii] <- cor(mu_stroop1[ii, ], mu_stroop2[ii, ])
   vec2sum(trr, term_name = "TRR", group_name = "subj", alpha = alpha)
 }
 
 # **get_norm_sd() - Calculate the relative contribution of subject-level variations**
+#
+# Result is the ratio between sd(hi-lo) over subjects and sd(response), estimated over
+# posterior samples.
 get_norm_sd <- function(mdl, alpha = .05) {
   data_nm <- toString(mdl$formula[[1]][[2]])
   denom <- sd(mdl$data[[data_nm]])  # "Scale" of all input data
+  mu <- ranef(mdl, summary = FALSE)$subj
   if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
-    samples <- as.data.frame(mdl)
-    sd_hilos <- list(
-      sd_hilo_wave1 = samples$sd_subj__hilo_wave1,
-      sd_hilo_wave2 = samples$sd_subj__hilo_wave2,
-      sd_hilo = (samples$sd_subj__hilo_wave1 + samples$sd_subj__hilo_wave2) / 2
-    )
+    mu_stroop1 <- mu[, , "hilo_wave1"]
+    mu_stroop2 <- mu[, , "hilo_wave2"]
   } else {
-    mu <- ranef(mdl, summary = FALSE)$subj
     mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"] # 4000*27
     mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
-    mu_stroop <- (mu_stroop1 + mu_stroop2) / 2
-    sd_hilos <- list(
-      sd_hilo_wave1 = apply(mu_stroop1, 1, sd),
-      sd_hilo_wave2 = apply(mu_stroop2, 1, sd),
-      sd_hilo = apply(mu_stroop, 1, sd)
-    )
   }
-  sd_hilos_norm <- list(norm_sd_hilo_wave1 = sd_hilos$sd_hilo_wave1 / denom,
-    norm_sd_hilo_wave2 = sd_hilos$sd_hilo_wave2 / denom,
-    norm_sd_hilo = sd_hilos$sd_hilo / denom)
+  mu_stroop <- (mu_stroop1 + mu_stroop2) / 2
+  sd_hilos_norm <- list(
+    norm_sd_hilo_wave1 = apply(mu_stroop1, 1, sd) / denom,
+    norm_sd_hilo_wave2 = apply(mu_stroop2, 1, sd) / denom,
+    norm_sd_hilo = apply(mu_stroop, 1, sd) / denom
+  )
   bind_rows(lapply(sd_hilos_norm, vec2sum, group_name = "subj",
     alpha = alpha), .id = "Term")
 }
@@ -174,7 +176,6 @@ get_norm_sd <- function(mdl, alpha = .05) {
 # Output: a tibble with the following terms:
 # - `model`, `response`, `session`
 # - `Term`, `Grouping`, `Estimate`, `Est.Error`
-# - `tstat`: it's just `Estimate` / `Est.Error`
 # - `CI.Lower` and `CI.Upper`: lower and upper bound of the credible interval defined by `alpha`.
 # - `Q.Lower` and `Q.upper`: indicating the percentile for `CI.Lower` and `CI.Upper`
 mdl2sum <- function(mdl, roi_val = NA, roi_term = "region", alpha = .05) {
