@@ -54,3 +54,4 @@ scratch/
 figs/
 reports/*html
 reports/*.md
+reports/figure

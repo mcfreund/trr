@@ -1,0 +1,49 @@
+---
+title: "Model Comparison"
+output: 
+  html_document:
+    toc: false
+    toc_depth: 2
+    toc_float: false
+    number_sections: false
+    df_print: paged
+---
+
+```{r, setup, echo = FALSE, results = "hide", message = FALSE}
+
+library(here)
+library(tidyverse)
+library(patchwork)
+
+source(here("code", "inferential", "_plotting.R"))
+
+input_name <- "core32_stats.rds"
+test_session <- "baseline"
+
+dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
+dat <- bind_rows(dat, .id = "model__response__session") %>%
+  separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
+  filter(session %in% .env$test_session)
+```
+
+# Model Comparison
+
+Here we compare the test-retest reliability of high-low control demand contrast among three different models and two different response variables:
+
+```{r, TRR, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+responses <- unique(dat$response)
+models <- unique(dat$model)
+for (i in seq_along(responses)) {
+  for (j in seq_along(models)) {
+    curr_res <- responses[[i]]
+    curr_mdl <- models[[j]]
+    curr_fig <- brain_plot(
+      dat %>% filter(Term == "TRR", response == .env$curr_res, model == .env$curr_mdl),
+      lim = c(0, 1), fig_title = paste(responses[[i]], models[[j]], sep = ", ")
+    )
+    if (j == 1) fig_row <- curr_fig else fig_row <- fig_row + curr_fig
+  }
+  if (i == 1) figs <- fig_row else figs <- figs / fig_row
+}
+figs + plot_annotation(title = "Test-Retest Reliability")
+```
