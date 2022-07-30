@@ -24,26 +24,66 @@ dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
 dat <- bind_rows(dat, .id = "model__response__session") %>%
   separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
   filter(session %in% .env$test_session)
+
+responses <- unique(dat$response)
+models <- unique(dat$model)
 ```
 
 # Model Comparison
 
-Here we compare the test-retest reliability of high-low control demand contrast among three different models and two different response variables:
+Here we compare the test-retest reliability of high-low control demand contrast among response variables `r responses` and models `r models`:
 
-```{r, TRR, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
-responses <- unique(dat$response)
-models <- unique(dat$model)
+```{r, TRR_brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
 for (i in seq_along(responses)) {
   for (j in seq_along(models)) {
-    curr_res <- responses[[i]]
-    curr_mdl <- models[[j]]
-    curr_fig <- brain_plot(
-      dat %>% filter(Term == "TRR", response == .env$curr_res, model == .env$curr_mdl),
-      lim = c(0, 1), fig_title = paste(responses[[i]], models[[j]], sep = ", ")
+    res <- responses[[i]]
+    mdl <- models[[j]]
+    fig <- brain_plot(
+      dat %>% filter(Term == "TRR", response == .env$res, model == .env$mdl),
+      lim = c(0, 1), fig_title = paste(res, mdl, sep = ", ")
     )
-    if (j == 1) fig_row <- curr_fig else fig_row <- fig_row + curr_fig
+    if (j == 1) fig_row <- fig else fig_row <- fig_row + fig
   }
   if (i == 1) figs <- fig_row else figs <- figs / fig_row
 }
-figs + plot_annotation(title = "Test-Retest Reliability")
+figs + plot_annotation(title = "Test-Retest Reliability", tag_levels = "A")
+```
+
+```{r, TRR_hist, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+for (i in seq_along(responses)) {
+  res <- responses[[i]]
+  fig <- ggplot(dat %>% filter(Term == "TRR", response == .env$res),
+    aes(x = model, y = Estimate, fill = model)) +
+    geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+    geom_jitter(size = 0.02, height = 0, width = 0.1) +
+    ylim(-0.5, 1) + labs(x = paste(res, "models"), y = "TRR") +
+    theme(axis.text.x = element_blank())
+  if (i == 1) figs <- fig else figs <- figs + fig
+}
+figs + plot_layout(guides = "collect") +
+  plot_annotation(title = "Test-Retest Reliability from Posterior Samples", tag_levels = "A")
+```
+```{r, TRR_hist_all, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
+
+# Read fixed_std model stats
+old_dat <- readRDS(here("out", "spatial", "archive", "fix_std_mdl_stats.rds"))
+old_dat <- bind_rows(old_dat, .id = "model__response__session") %>%
+  separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
+  filter(Term == "TRR")
+full_dat <- bind_rows(dat, old_dat)
+full_responses <- unique(full_dat$response)
+full_models <- unique(full_dat$model)
+
+for (i in seq_along(full_models)) {
+  mdl <- full_models[[i]]
+  fig <- ggplot(full_dat %>% filter(Term == "TRR", model == .env$mdl),
+    aes(x = response, y = Estimate, fill = response)) +
+    geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+    geom_jitter(size = 0.02, height = 0, width = 0.1) +
+    ylim(-0.5, 1) + labs(x = mdl, y = NULL) +
+    theme(axis.text.x = element_blank())
+  if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
+}
+figs + plot_layout(nrow = 1, guides = "collect") +
+  plot_annotation(title = "Test-Retest Reliability from Posterior Samples", tag_levels = "A")
 ```

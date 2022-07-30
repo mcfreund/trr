@@ -94,7 +94,8 @@ brain_plot <- function(df, stat_term = "Estimate", eff_term = NULL, eff = NULL,
 # Make sure the rmarkdown file works in this way before knitting it!
 if (sys.nframe() == 0) {
   f <- "model_comparison.rmd"
+  cwd <- getwd()
   setwd(here::here("reports"))
   knitr::knit(f)
-  setwd(here::here())
+  setwd(cwd)
 }
