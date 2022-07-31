@@ -19,19 +19,42 @@ source(here("code", "inferential", "_plotting.R"))
 
 input_name <- "core32_stats.rds"
 test_session <- "baseline"
+mdl_base <- "full"  # Base level for comparison between models
+res_base <- "uv"  # Base level for comparison between responses
 
 dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
 dat <- bind_rows(dat, .id = "model__response__session") %>%
   separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
-  filter(session %in% .env$test_session)
+  filter(session %in% .env$test_session) %>%
+  arrange(model, response, session, region)
 
 responses <- unique(dat$response)
 models <- unique(dat$model)
+
+mdl_diff_dat <- dat %>%
+  filter(Term == "TRR") %>%
+  select(Estimate, region, model, response, session) %>%
+  pivot_wider(values_from = Estimate, names_from = model,
+    id_cols = c(region, response, session))
+for (mdl in models) {
+  if (mdl != mdl_base) mdl_diff_dat[[paste(mdl, "-", mdl_base)]] <- (
+    mdl_diff_dat[[mdl]] - mdl_diff_dat[[mdl_base]])
+}
+
+res_diff_dat <- dat %>%
+  filter(Term == "TRR") %>%
+  select(Estimate, region, model, response, session) %>%
+  pivot_wider(values_from = Estimate, names_from = response,
+    id_cols = c(region, model, session))
+for (res in responses) {
+  if (res != res_base) res_diff_dat[[paste(res, "-", res_base)]] <- (
+    res_diff_dat[[res]] - res_diff_dat[[res_base]])
+}
 ```
 
 # Model Comparison
 
-Here we compare the test-retest reliability of high-low control demand contrast among response variables `r responses` and models `r models`:
+Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables `r responses` and models `r models`:
 
 ```{r, TRR_brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
 for (i in seq_along(responses)) {
@@ -49,6 +72,52 @@ for (i in seq_along(responses)) {
 figs + plot_annotation(title = "Test-Retest Reliability", tag_levels = "A")
 ```
 
+Here we plot the difference in TRR between different models:
+
+```{r, TRR_mdl_diff_brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+first_row <- TRUE
+for (i in seq_along(models)) {
+  mdl <- models[[i]]
+  if (mdl == mdl_base) next
+  for (j in seq_along(responses)) {
+    res <- responses[[j]]
+    fig <- brain_plot(mdl_diff_dat %>% filter(response == .env$res),
+      stat_term = paste(mdl, "-", mdl_base), lim = c(-0.2, 0.2),
+      fig_title = paste0(mdl, " - ", mdl_base, ", ", res))
+    if (j == 1) fig_row <- fig else fig_row <- fig_row + fig
+  }
+  if (first_row) {
+    first_row <- FALSE
+    figs <- fig_row
+  } else figs <- figs / fig_row
+}
+figs + plot_annotation(title = "Difference in TRR between models", tag_levels = "A")
+```
+
+and between different response variables:
+
+```{r, TRR_res_diff_brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+first_row <- TRUE
+for (i in seq_along(responses)) {
+  res <- responses[[i]]
+  if (res == res_base) next
+  for (j in seq_along(models)) {
+    mdl <- models[[j]]
+    fig <- brain_plot(res_diff_dat %>% filter(model == .env$mdl),
+      stat_term = paste(res, "-", res_base), lim = c(-0.2, 0.2),
+      fig_title = paste0(res, " - ", res_base, ", ", mdl))
+    if (j == 1) fig_row <- fig else fig_row <- fig_row + fig
+  }
+  if (first_row) {
+    first_row <- FALSE
+    figs <- fig_row
+  } else figs <- figs / fig_row
+}
+figs + plot_annotation(title = "Difference in TRR between responses", tag_levels = "A")
+```
+
+Here we plot the distribution of TRR over the core32 parcels.
+
 ```{r, TRR_hist, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
 for (i in seq_along(responses)) {
   res <- responses[[i]]
@@ -56,17 +125,20 @@ for (i in seq_along(responses)) {
     aes(x = model, y = Estimate, fill = model)) +
     geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
     geom_jitter(size = 0.02, height = 0, width = 0.1) +
-    ylim(-0.5, 1) + labs(x = paste(res, "models"), y = "TRR") +
+    ylim(-0.5, 1) + labs(x = res, y = NULL) +
     theme(axis.text.x = element_blank())
-  if (i == 1) figs <- fig else figs <- figs + fig
+  if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
 }
 figs + plot_layout(guides = "collect") +
-  plot_annotation(title = "Test-Retest Reliability from Posterior Samples", tag_levels = "A")
+  plot_annotation(title = "Test-Retest Reliability over ROIs", tag_levels = "A")
 ```
-```{r, TRR_hist_all, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
+
+Here we plot the TRR over core32 parcels and compare it with the old models we fit, which use either `mda::fda()`("ridge") or `sparsediscrim::lda_schafer()`("rda_full" and "rda_diag") to generate the response variable. The TRR model is similar to `"no_lscov_symm"` model but with only a fixed sigma term. Note that here the figures are plotted for each TRR model while each violin plot are for one response type.
+
+```{r, TRR_hist_core32, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
 
 # Read fixed_std model stats
-old_dat <- readRDS(here("out", "spatial", "archive", "fix_std_mdl_stats.rds"))
+old_dat <- readRDS(here("out", "spatial", "archive", "fix_std_mdl_core32_stats.rds"))
 old_dat <- bind_rows(old_dat, .id = "model__response__session") %>%
   separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
   filter(Term == "TRR")
@@ -84,6 +156,6 @@ for (i in seq_along(full_models)) {
     theme(axis.text.x = element_blank())
   if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
 }
-figs + plot_layout(nrow = 1, guides = "collect") +
-  plot_annotation(title = "Test-Retest Reliability from Posterior Samples", tag_levels = "A")
+figs + plot_layout(nrow = 1, guides = "auto") +
+  plot_annotation(title = "Test-Retest Reliability over ROIs", tag_levels = "A")
 ```

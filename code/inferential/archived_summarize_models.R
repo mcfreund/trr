@@ -101,7 +101,7 @@ prep_dat_rds <- function(fpath) {
 
 # Data
 inputs <- list(
-  fix_std__fda__baseline = "mv_bayes_MCMC_coefs_fda.rds",
+  fix_std__ridge__baseline = "mv_bayes_MCMC_coefs_fda.rds",
   fix_std__uv__baseline = "uv_bayes_MCMC_coefs.rds",
   fix_std__lda_full__baseline = "mv_bayes_MCMC_coefs_schafer_full.rds",
   fix_std__lda_diag__baseline = "mv_bayes_MCMC_coefs_schafer_diag.rds"
@@ -110,4 +110,4 @@ inputs <- list(
 res <- lapply(inputs, function(f) {
   prep_dat_rds(here("out", "spatial", "archive", f))
 })
-saveRDS(res, here("out", "spatial", "archive", "fix_std_mdl_stats.rds"))
+saveRDS(res, here("out", "spatial", "archive", "fix_std_mdl_core32_stats.rds"))

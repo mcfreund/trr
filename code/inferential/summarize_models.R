@@ -180,5 +180,5 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
 ########################### Main function ##############################
 
 res <- prep_mdl(model_names = c("full", "no_lscov", "no_lscov_symm"),
-  response_names = c("rda", "uv"))
+  response_names = c("rda", "uv", "ridge"))
 saveRDS(res, file = here("out", "inferential", atlas_nm, "core32_stats.rds"))
