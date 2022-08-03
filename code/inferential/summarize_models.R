@@ -5,6 +5,7 @@
 #
 # To-do:
 # - Use `posterior()` package to summarize results and add `ess` and `rhat`
+# - Try MAP instead of mean
 # - Parallelize `prep_mdl()`
 
 library(here)

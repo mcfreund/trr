@@ -88,6 +88,43 @@ brain_plot <- function(df, stat_term = "Estimate", eff_term = NULL, eff = NULL,
   return(fig)
 }
 
+# **get_diff_data() - calculate the difference between terms**
+#
+# Inputs:
+# - x: a tibble
+# - name_term: "model" or "response"
+# - base_level: base level for comparison between `name_term`s, e.g. "uv"
+# - val_term: value term
+# - id_term: terms that uniquely define an observation, by default all the rest terms
+# - pivoting: "long" or "wide", by default "long"
+#
+# Ouput:
+# - res: a tibble with `name_term`s replaced by the difference between each level
+#   (expcept base level) and base level.
+get_diff_dat <- function(x, name_term, base_level, val_term = "Estimate",
+  id_term = NULL, pivoting = "long") {
+
+  if (!is.null(id_term)) {
+    res <- select(x, .env$name_term, .env$val_term, .env$id_term)
+  } else res <- x
+  term_levels <- unique(res[[name_term]])
+  res <- pivot_wider(res, names_from = .env$name_term, values_from = .env$val_term)
+  for (term_level in term_levels) {
+    if (term_level != base_level) res[[paste(term_level, "-", base_level)]] <- (
+      res[[term_level]] - res[[base_level]])
+  }
+  res <- select(res, !.env$term_levels)
+
+  if (pivoting == "long") {
+    new_names <- paste(term_levels[term_levels != base_level], "-", base_level)
+    res <- pivot_longer(res, all_of(new_names),
+      names_to = name_term, values_to = val_term)
+  }
+
+  res
+
+}
+
 # Main function - knitting an rmarkdown report
 #
 # Note: It will change the working directory to the directory of the rmarkdown file.
