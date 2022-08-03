@@ -42,4 +42,4 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
   - Run `code/inferential/estimate_reliability.R` to fit the models. The fitted models will be saved to `out/inferential/schaefer2018_17_400_fsaverage5/NAMES_OF_ROI/`.
     - Each model is about 36M and requires about an hour to train (with 4 chains on 4 cores) without further parallelization.
     - With `mclapply()` over the ROIs we can fit 32 models in about 15 hours. 
-    - Currently, we only focus on "baseline" session and compare between three model types and two response types ("uv" and "rda")
+    - Currently, we only focus on "baseline" session and the core32 ROIs.

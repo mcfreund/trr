@@ -6,6 +6,7 @@
 # To-do:
 # - Use `posterior()` package to summarize results and add `ess` and `rhat`
 # - Try MAP instead of mean
+# - Investigate the posterior distribution of TRR
 # - Parallelize `prep_mdl()`
 
 library(here)

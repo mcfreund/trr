@@ -42,7 +42,6 @@ library(mfutils)
 library(ggsegSchaefer)
 library(doParallel)
 library(foreach)
-library(lme4)
 library(brms)
 library(parallel)
 
@@ -59,13 +58,13 @@ n_cores <- 20
 file_refit <- "on_change"  ## "never", "always", see help(brm)
 tasks <- "Stroop"
 sessions <- c("baseline", "proactive", "reactive")
-response_names <- c("ridge")  # Note: currently must be c("rda"), c("ridge") or c("uv")
+response_names <- c("uv")  # Note: currently must be c("rda"), c("ridge") or c("uv")
 vterm <- switch(response_names[[1]],
   rda = "value.rda",
   ridge = "value.ridge",
   uv = "uv"
 )
-model_names <- c("full", "no_lscov", "no_lscov_symm")
+model_names <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 
 
 ## Input from ./code/spatial/multi...task.R:
