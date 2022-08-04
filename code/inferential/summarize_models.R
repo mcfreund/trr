@@ -4,8 +4,6 @@
 # Version: 07/29/2022
 #
 # To-do:
-# - Use `posterior()` package to summarize results and add `ess` and `rhat`
-# - Try MAP instead of mean
 # - Investigate the posterior distribution of TRR
 # - Parallelize `prep_mdl()`
 
@@ -15,6 +13,7 @@ library(dplyr)
 library(ggsegSchaefer)
 library(mfutils)
 library(brms)
+library(posterior)
 
 # Get file naming function
 source(here("code", "_funs.R"))
@@ -32,23 +31,62 @@ if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
   stop("not configured for atlas")
 }
 
-# **vec2sum() - Summarize sampling statistics**
+# **rvar_map() - Maximum A Posterior Estimation**
 #
 # Inputs:
-# - `dat`: a vector or a dataframe column
-# - `term_name`, `group_name`: names for `Term` and `Grouping`
-# - `alpha`: determining the percentile
-# - `one-sided`: whether to use `alpha` or `alpha`/2 probability. Default is TRUE!
+# - x: an `rvar`
+# - n: number of points for density calculation, by default 100
 #
-# Output: a tibble()
-vec2sum <- function(dat, term_name = NA, group_name = NA, alpha = .05, one_sided = TRUE) {
+# Ouput: a numeric value, the peak position of the density distribution
+rvar_map <- function(x, n = 100) {
+  segs <- seq(min(x), max(x), length.out = n)
+  d <- density(x, segs)
+  segs[[which.max(d)]]
+}
+
+# **get_summary() - Summarize sampling statistics**
+#
+# Inputs:
+# - `dat`: a vector; or a dataframe/matrix with N columns (variables)
+# - `term_name`, `group_name`: names for `Term` and `Grouping`, can be a length-N vector
+# - `alpha`: probability to calculate percentiles, by default 0.05
+# - `one-sided`: whether to use `alpha` or `alpha`/2 probability. Default is TRUE!
+# - `n_chains`: number of chains, by default 1.
+#
+# Output: a tibble() with N rows and following columns:
+# - `Term`: name of the variable
+# - `Estimate`, `Est.Error`: mean and sd
+# - `MAP`: maximum a posterior estimation
+# - `rhat`, `ess_bulk`, `ess_tail`: convergence diagnostic statistics
+# - `CI.Lower`, `CI.Upper`, `Q.Lower`, `Q.Upper`: percentiles and corresponding probabilities
+# - `Grouping`: name of the groups
+get_summary <- function(dat, term_name = NA, group_name = NA, alpha = .05,
+  one_sided = TRUE, n_chains = 1) {
+
+  # Transform to draws data frame
+  if (length(dim(dat)) < 3) {
+    x <- as.data.frame(dat)
+    if (!is.na(term_name)) names(x) <- term_name
+    n_iter <- dim(x)[1] / n_chains
+    if (dim(x)[1] %% n_chains) stop("Number of samples is not divisible by number of chains!")
+    x[[".chain"]] <- rep(1:n_chains, each = n_iter)
+  }
+  x <- as_draws_rvars(x)
+
+  # Credible Interval
   if (one_sided) ci <- c(alpha, 1 - alpha) else ci <- c(alpha / 2, 1 - alpha / 2)
-  res <- tibble(
-    Term = term_name, Estimate = mean(dat), `Est.Error` = sd(dat),
-    `CI.Lower` = quantile(dat, probs = ci[[1]]),
-    `CI.Upper` = quantile(dat, probs = ci[[2]]),
-    `Q.Lower` = ci[[1]], `Q.Upper` = ci[[2]], Grouping = group_name
-  )
+  ci_res <- summary(x, "quantile2", .args = list(probs = ci)) %>%
+    mutate(variable = NULL, `Q.Lower` = ci[[1]], `Q.Upper` = ci[[2]])
+  names(ci_res)[1:2] <- c("CI.Lower", "CI.Upper")
+
+  # MAP
+  map_res <- unlist(lapply(x, rvar_map))
+
+  res <- summary(x, Estimate = mean, `Est.Error` = sd, default_convergence_measures()) %>%
+    bind_cols(ci_res) %>%
+    mutate(MAP = map_res, Grouping = group_name) %>%
+    relocate(MAP, .after = `Est.Error`) %>%
+    rename(Term = variable)
 }
 
 #  **get_trr() - Calculate test-retest reliability**
@@ -66,7 +104,8 @@ get_trr <- function(mdl, alpha = .05) {
   }
   trr <- rep(0, dim(mu)[1])
   for (ii in seq_along(trr)) trr[ii] <- cor(mu_stroop1[ii, ], mu_stroop2[ii, ])
-  vec2sum(trr, term_name = "TRR", group_name = "subj", alpha = alpha)
+  get_summary(trr, term_name = "TRR", group_name = "subj",
+    alpha = alpha, n_chains = dim(mdl$fit)[2])
 }
 
 # **get_norm_sd() - Calculate the relative contribution of subject-level variations**
@@ -90,8 +129,8 @@ get_norm_sd <- function(mdl, alpha = .05) {
     norm_sd_hilo_wave2 = apply(mu_stroop2, 1, sd) / denom,
     norm_sd_hilo = apply(mu_stroop, 1, sd) / denom
   )
-  bind_rows(lapply(sd_hilos_norm, vec2sum, group_name = "subj",
-    alpha = alpha), .id = "Term")
+  bind_rows(lapply(sd_hilos_norm, get_summary, group_name = "subj",
+    alpha = alpha, n_chains = dim(mdl$fit)[2]), .id = "Term")
 }
 
 # **mdl2sum() - Summarize statistics of interest from a model**
@@ -126,7 +165,7 @@ mdl2sum <- function(mdl, roi_val = NA, roi_term = "region", alpha = .05) {
   res <- bind_rows(res, r2)
 
   # Population-level high-low contrast
-  if ("sd_subj__hilo_wave1" %in% variables(mdl)) {  # "no_lscov_symm"
+  if ("b_hilo_wave1" %in% variables(mdl)) {
     hypos <- c(hilo_wave1 = "hilo_wave1 > 0", hilo_wave2 = "hilo_wave2 > 0")
   } else {
     hypos <- c(hilo_wave1 = "hi_wave1 - lo_wave1 > 0",
@@ -160,18 +199,21 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
     "__", sessions))
   for (model_name in model_names) {
     for (response_name in response_names) {
-    for (session in sessions) {
+      for (session in sessions) {
         model_info <- get_model_info(model_name, response_name, session)
         rds_name <- paste0(model_info$model_prefix, ".rds")
         files <- list.files(in_path, pattern = rds_name, full.names = T,
-        recursive = T)
+          recursive = T)
+        if (length(files) == 0) next
         curr_res <- bind_rows(lapply(files, function(f) {
-        mdl <- readRDS(f)
-        mdl_region <- basename(dirname(f))
-        mdl2sum(mdl, roi_val = mdl_region)
+          mdl <- readRDS(f)
+          mdl_region <- basename(dirname(f))
+          print(paste("Now working on", model_name, response_name,
+            session, mdl_region, "..."))
+          mdl2sum(mdl, roi_val = mdl_region)
         }))
         res[[paste0(model_name, "__", response_name, "__", session)]] <- curr_res
-    }
+      }
     }
   }
   res
@@ -181,6 +223,6 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
 
 ########################### Main function ##############################
 
-res <- prep_mdl(model_names = c("full", "no_lscov", "no_lscov_symm"),
+res <- prep_mdl(model_names = c("full", "no_lscov", "no_lscov_symm", "fixed_sigma"),
   response_names = c("rda", "uv", "ridge"))
 saveRDS(res, file = here("out", "inferential", atlas_nm, "core32_stats.rds"))
