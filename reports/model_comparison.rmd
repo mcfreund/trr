@@ -19,44 +19,27 @@ source(here("code", "inferential", "_plotting.R"))
 
 input_name <- "core32_stats.rds"
 test_session <- "baseline"
-mdl_base <- "full"  # Base level for comparison between models
-res_base <- "uv"  # Base level for comparison between responses
+responses <- c("uv", "rda", "ridge")  # The first one is used as the base level
+models <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 
 dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
 dat <- bind_rows(dat, .id = "model__response__session") %>%
   separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
   filter(session %in% .env$test_session) %>%
-  arrange(model, response, session, region)
-
-responses <- unique(dat$response)
-models <- unique(dat$model)
-
-mdl_diff_dat <- dat %>%
-  filter(Term == "TRR") %>%
-  select(Estimate, region, model, response, session) %>%
-  pivot_wider(values_from = Estimate, names_from = model,
-    id_cols = c(region, response, session))
-for (mdl in models) {
-  if (mdl != mdl_base) mdl_diff_dat[[paste(mdl, "-", mdl_base)]] <- (
-    mdl_diff_dat[[mdl]] - mdl_diff_dat[[mdl_base]])
-}
+  mutate(model = factor(model, .env$models, ordered = T),
+    response = factor(response, .env$responses, ordered = T)) %>%
+  arrange(model, response, region)
 
 res_diff_dat <- dat %>%
   filter(Term == "TRR") %>%
-  select(Estimate, region, model, response, session) %>%
-  pivot_wider(values_from = Estimate, names_from = response,
-    id_cols = c(region, model, session))
-for (res in responses) {
-  if (res != res_base) res_diff_dat[[paste(res, "-", res_base)]] <- (
-    res_diff_dat[[res]] - res_diff_dat[[res_base]])
-}
+  get_diff_dat(name_term = "response", id_term = c("region", "model"))
 ```
 
 # Model Comparison
 
 ## Fitting Statistics
 
-First we compare the Bayesian R-squared of the models (see [here](https://paul-buerkner.github.io/brms/reference/bayes_R2.brmsfit.html)). The higher the value, the better the fit. We can see that generally, `no_lscov_symm` > `no_lscov` > `full`.
+First we compare the Bayesian R-squared of the models (see [here](https://paul-buerkner.github.io/brms/reference/bayes_R2.brmsfit.html)). Each line is for one ROI. The higher the value, the better the fit.
 
 ```{r, Bayes-R2, echo = FALSE, message = FALSE, fig.dim = c(16, 12)}
 for (i in seq_along(responses)) {
@@ -69,7 +52,15 @@ for (i in seq_along(responses)) {
   if (i == 1) figs <- fig + labs(y = "Bayes R2") else figs <- figs + fig
 }
 figs + plot_annotation(title = "Bayesian R-Squared for Core32 ROIs", tag_levels = "A")
+
+tmp <- dat %>%
+  filter(Term == "Bayes_R2") %>%
+  group_by(model) %>%
+  summarize(mean_R2 = mean(Estimate)) %>%
+  arrange(-mean_R2)
 ```
+
+We can see that generally, `r paste(tmp$model, collapse = " > ")`.
 
 ```{r, elpd-waic, echo = FALSE, message = FALSE, fig.dim = c(16, 12), eval = FALSE}
 for (i in seq_along(responses)) {
@@ -85,100 +76,183 @@ figs + plot_annotation(title = "elpd_waic for Core32 ROIs",
   tag_levels = "A")
 ```
 
-Here we show the difference in the expected log predictive density (elpd) estimated by leave-one-out (loo) cross-validation across three models (see [here](https://mc-stan.org/loo/reference/loo.html)). The higher the value, the better the fit. Here `no_lscov_symm` is used as the base level. We can see that all values are negative, indicating that `no_lscov_symm` is indeed the best fit. Results using [`waic`](https://mc-stan.org/loo/reference/waic.html) instead of `loo` are almost identical.
+Next we show the difference in the expected log predictive density (elpd) estimated by leave-one-out (loo) cross-validation across models (see [here](https://mc-stan.org/loo/reference/loo.html)). The higher the value, the better the fit. Here "`r models[[1]]`" is used as the base level.
 
-```{r, diff-elpd-loo, echo = FALSE, message = FALSE, fig.dim = c(16, 12)}
+```{r, diff-elpd-loo, echo = FALSE, message = FALSE, warning = FALSE, fig.dim = c(16, 12)}
+
+# Get data
 diff_dat <- get_diff_dat(dat %>% filter(Term == "elpd_loo"), name_term = "model",
-  base_level = "no_lscov_symm", val_term = "Estimate",
-  id_term = c("region", "session", "response"))
+  id_term = c("region", "response"))
+
+# Deal with `fixed_sigma`
+tmp <- range(diff_dat %>%
+  filter(model == paste("fixed_sigma", "-", .env$models[[1]])) %>%
+  select(Estimate)
+)
+print(paste0("Range of the difference in elpd_loo between fixed_sigma and ", models[[1]],
+  " models: (", tmp[[1]], ", ", tmp[[2]], ")"))
+
+ylims <- range(diff_dat %>%
+  filter(model != paste("fixed_sigma", "-", .env$models[[1]])) %>%
+  select(Estimate)
+)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
 for (i in seq_along(responses)) {
   res <- responses[[i]]
   fig <- ggplot(diff_dat %>% filter(response == .env$res),
     aes(x = model, y = Estimate, group = region)) +
     geom_line(linetype = 1, color = "black") + geom_point() +
-    labs(x = NULL, y = NULL, title = res) + ylim(-20, 0) +
+    labs(x = NULL, y = NULL, title = res) + ylim(ylims[[1]], ylims[[2]]) +
     theme(axis.text.x = element_text(size = 14, hjust = 1, vjust = 1, angle = 25))
   if (i == 1) figs <- fig + labs(y = "Difference between EPLD_LOO") else figs <- figs + fig
 }
-figs + plot_annotation(title = 
-  "Difference in ELPD_LOO between complex models and simplest model for Core32 ROIs",
-  tag_levels = "A")
+figs + plot_annotation(title = paste("Difference in elpd_loo between",
+  models[[1]], "and other models for Core32 ROIs"), tag_levels = "A")
 ```
+
+We can see that "no_lscov_symm" is the best and "fixed_sigma" is much worse than others. Results using [`waic`](https://mc-stan.org/loo/reference/waic.html) instead of `loo` are almost identical.
 
 ## Test-Retest Reliability
 
-Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables `r responses` and models `r models`:
+Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables and models:
 
 ```{r, TRR-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+
+ylims <- range(dat %>%
+  filter(Term == "TRR") %>%
+  select(Estimate)
+)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
+figs <- NULL
 for (i in seq_along(responses)) {
   for (j in seq_along(models)) {
     res <- responses[[i]]
     mdl <- models[[j]]
     fig <- brain_plot(
       dat %>% filter(Term == "TRR", response == .env$res, model == .env$mdl),
-      lim = c(0, 1), fig_title = paste(res, mdl, sep = ", ")
+      lim = ylims, fig_title = paste(res, mdl, sep = ", ")
     )
-    if (j == 1) fig_row <- fig else fig_row <- fig_row + fig
+    if (is.null(figs)) figs <- fig else figs <- figs + fig
   }
-  if (i == 1) figs <- fig_row else figs <- figs / fig_row
 }
-figs + plot_annotation(title = "Test-Retest Reliability", tag_levels = "A")
+figs <- (figs + plot_layout(nrow = length(responses)) +
+  plot_annotation(title = "Test-Retest Reliability", tag_levels = "A"))
+print(figs)
 ```
 
 Here we plot the difference in TRR between different models:
 
 ```{r, TRR-mdl-diff-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
-first_row <- TRUE
-for (i in seq_along(models)) {
-  mdl <- models[[i]]
-  if (mdl == mdl_base) next
-  for (j in seq_along(responses)) {
-    res <- responses[[j]]
-    fig <- brain_plot(mdl_diff_dat %>% filter(response == .env$res),
-      stat_term = paste(mdl, "-", mdl_base), lim = c(-0.2, 0.2),
-      fig_title = paste0(mdl, " - ", mdl_base, ", ", res))
-    if (j == 1) fig_row <- fig else fig_row <- fig_row + fig
+
+mdl_diff_dat <- dat %>%
+  filter(Term == "TRR") %>%
+  get_diff_dat(name_term = "model", id_term = c("region", "response"))
+ylims <- range(mdl_diff_dat$Estimate)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
+figs <- NULL
+for (i in seq_along(responses)) {
+  for (j in seq_along(models)) {
+    if (j == 1) next
+    res <- responses[[i]]
+    mdl <- models[[j]]
+    term_name <- paste(mdl, "-", models[[1]])
+    fig <- brain_plot(mdl_diff_dat %>%
+      filter(response == .env$res, model == .env$term_name),
+      lim = ylims,
+      fig_title = paste0(res, ", ", term_name))
+    if (is.null(figs)) figs <- fig else figs <- figs + fig
   }
-  if (first_row) {
-    first_row <- FALSE
-    figs <- fig_row
-  } else figs <- figs / fig_row
 }
-figs + plot_annotation(title = "Difference in TRR between models", tag_levels = "A")
+figs <- (figs + plot_layout(nrow = length(responses)) +
+  plot_annotation(title = "Difference in TRR between models", tag_levels = "A"))
+print(figs)
 ```
 
 and between different response variables:
 
 ```{r, TRR-res-diff-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
-first_row <- TRUE
+
+res_diff_dat <- dat %>%
+  filter(Term == "TRR") %>%
+  get_diff_dat(name_term = "response", id_term = c("region", "model"))
+ylims <- range(res_diff_dat$Estimate)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
+figs <- NULL
 for (i in seq_along(responses)) {
-  res <- responses[[i]]
-  if (res == res_base) next
+  if (i == 1) next
   for (j in seq_along(models)) {
+    res <- responses[[i]]
     mdl <- models[[j]]
-    fig <- brain_plot(res_diff_dat %>% filter(model == .env$mdl),
-      stat_term = paste(res, "-", res_base), lim = c(-0.2, 0.2),
-      fig_title = paste0(res, " - ", res_base, ", ", mdl))
-    if (j == 1) fig_row <- fig else fig_row <- fig_row + fig
+    term_name <- paste(res, "-", responses[[1]])
+    fig <- brain_plot(res_diff_dat %>%
+      filter(model == .env$mdl, response == .env$term_name),
+      lim = ylims,
+      fig_title = paste0(term_name, ", ", mdl))
+    if (is.null(figs)) figs <- fig else figs <- figs + fig
   }
-  if (first_row) {
-    first_row <- FALSE
-    figs <- fig_row
-  } else figs <- figs / fig_row
 }
-figs + plot_annotation(title = "Difference in TRR between responses", tag_levels = "A")
+figs <- (figs + plot_layout(nrow = length(responses) - 1) +
+  plot_annotation(title = "Difference in TRR between responses", tag_levels = "A"))
+print(figs)
 ```
 
-Here we plot the distribution of TRR over the core32 parcels.
+Here we plot the distribution of the data in the previous figure over 32 ROIs:
 
-```{r, TRR-hist, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+```{r, TRR-res-diff-hist, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+ylims <- range(res_diff_dat$Estimate)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+for (i in seq_along(models)) {
+  mdl <- models[[i]]
+  fig <- ggplot(res_diff_dat %>% filter(model == .env$mdl),
+    aes(x = response, y = Estimate, fill = response)) +
+    geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+    geom_jitter(size = 0.02, height = 0, width = 0.1) +
+    ylim(ylims[[1]], ylims[[2]]) + labs(x = mdl, y = NULL) +
+    theme(axis.text.x = element_blank())
+  if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
+}
+figs + plot_layout(nrow = 1, guides = "collect") +
+  plot_annotation(title = "Test-Retest Reliability over ROIs", tag_levels = "A")
+```
+
+This is a similar plot but for the difference between models:
+
+```{r, TRR-mdl-diff-hist, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+ylims <- range(mdl_diff_dat$Estimate)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+for (i in seq_along(responses)) {
+  res <- responses[[i]]
+  fig <- ggplot(mdl_diff_dat %>% filter(response == .env$res),
+    aes(x = model, y = Estimate, fill = model)) +
+    geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+    geom_jitter(size = 0.02, height = 0, width = 0.1) +
+    ylim(ylims[[1]], ylims[[2]]) + labs(x = res, y = NULL) +
+    theme(axis.text.x = element_blank())
+  if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
+}
+figs + plot_layout(nrow = 1, guides = "collect") +
+  plot_annotation(title = "Test-Retest Reliability over ROIs", tag_levels = "A")
+```
+
+Here we plot the distribution of TRR over the core32 parcels: (pending)
+
+```{r, TRR-hist, echo = FALSE, message = FALSE, fig.dim = c(16, 9), eval = FALSE}
+ylims <- range(dat %>%
+  filter(Term == "TRR") %>%
+  select(Estimate)
+)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
 for (i in seq_along(responses)) {
   res <- responses[[i]]
   fig <- ggplot(dat %>% filter(Term == "TRR", response == .env$res),
     aes(x = model, y = Estimate, fill = model)) +
     geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
     geom_jitter(size = 0.02, height = 0, width = 0.1) +
-    ylim(-0.5, 1) + labs(x = res, y = NULL) +
+    ylim(ylims[[1]], ylims[[2]]) + labs(x = res, y = NULL) +
     theme(axis.text.x = element_blank())
   if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
 }
@@ -186,9 +260,13 @@ figs + plot_layout(guides = "collect") +
   plot_annotation(title = "Test-Retest Reliability over ROIs", tag_levels = "A")
 ```
 
-Here we plot the TRR over core32 parcels and compare it with the old models we fit, which use either `mda::fda()`("ridge") or `sparsediscrim::lda_schafer()`("rda_full" and "rda_diag") to generate the response variable. The TRR model is similar to `"no_lscov_symm"` model but with only a fixed sigma term. Note that here the figures are plotted for each TRR model while each violin plot are for one response type.
+## Comparison with Previous Results
 
-```{r, TRR-hist-core32, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
+Here we plot the TRR over core32 parcels and compare it with the old models we fit, which use either `mda::fda()`("ridge") or `sparsediscrim::lda_schafer()`("rda_full" and "rda_diag") to generate the response variable. The TRR model is similar to `"fix_sigma"` model but the fix effects are treatment-coded. Each figure is for one TRR model while each violin plot is for one response type.
+
+(figure removed)
+
+```{r, TRR-hist-core32, eval = FALSE, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
 
 # Read fixed_std model stats
 old_dat <- readRDS(here("out", "spatial", "archive", "fix_std_mdl_core32_stats.rds"))
@@ -215,7 +293,9 @@ figs + plot_layout(nrow = 1, guides = "auto") +
 
 And the distribution of the difference between response types:
 
-```{r, TRR-diff-hist-core32, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
+(figure removed)
+
+```{r, TRR-diff-hist-core32, eval = FALSE, echo = FALSE, message = FALSE, fig.dim = c(21, 9)}
 old_responses <- unique(old_dat$response)
 res_diff_old_dat <- old_dat %>%
   filter(Term == "TRR") %>%

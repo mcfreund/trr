@@ -93,21 +93,27 @@ brain_plot <- function(df, stat_term = "Estimate", eff_term = NULL, eff = NULL,
 # Inputs:
 # - x: a tibble
 # - name_term: "model" or "response"
-# - base_level: base level for comparison between `name_term`s, e.g. "uv"
-# - val_term: value term
-# - id_term: terms that uniquely define an observation, by default all the rest terms
+# - base_level: base level for comparison between `name_term`s, e.g. "uv". By default
+#   it's the first value in `name_term` if `name_term` is not factor, or it's the first
+#   level of `name_term` if `name_term` is a factor.
+# - val_term: value term, by default "Estimate"
+# - id_term: terms that uniquely define an observation, by default all other terms
 # - pivoting: "long" or "wide", by default "long"
 #
 # Ouput:
 # - res: a tibble with `name_term`s replaced by the difference between each level
 #   (expcept base level) and base level.
-get_diff_dat <- function(x, name_term, base_level, val_term = "Estimate",
+get_diff_dat <- function(x, name_term, base_level = NA, val_term = "Estimate",
   id_term = NULL, pivoting = "long") {
 
   if (!is.null(id_term)) {
     res <- select(x, .env$name_term, .env$val_term, .env$id_term)
   } else res <- x
-  term_levels <- unique(res[[name_term]])
+  if (is.factor(res[[name_term]])) {
+    term_levels <- levels(res[[name_term]])
+  } else term_levels <- unique(res[[name_term]])
+  if (is.na(base_level)) base_level <- term_levels[[1]]
+
   res <- pivot_wider(res, names_from = .env$name_term, values_from = .env$val_term)
   for (term_level in term_levels) {
     if (term_level != base_level) res[[paste(term_level, "-", base_level)]] <- (
