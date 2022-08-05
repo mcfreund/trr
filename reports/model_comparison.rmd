@@ -30,6 +30,9 @@ dat <- bind_rows(dat, .id = "model__response__session") %>%
     response = factor(response, .env$responses, ordered = T)) %>%
   arrange(model, response, region)
 
+mdl_diff_dat <- dat %>%
+  filter(Term == "TRR") %>%
+  get_diff_dat(name_term = "model", id_term = c("region", "response"))
 res_diff_dat <- dat %>%
   filter(Term == "TRR") %>%
   get_diff_dat(name_term = "response", id_term = c("region", "model"))
@@ -116,93 +119,6 @@ figs + plot_annotation(title = "elpd_waic for Core32 ROIs",
 
 ## Test-Retest Reliability
 
-### Brain Plots
-
-Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables and models:
-
-```{r, TRR-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
-
-ylims <- range(dat %>%
-  filter(Term == "TRR") %>%
-  select(Estimate)
-)
-ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
-
-figs <- NULL
-for (i in seq_along(responses)) {
-  for (j in seq_along(models)) {
-    res <- responses[[i]]
-    mdl <- models[[j]]
-    fig <- brain_plot(
-      dat %>% filter(Term == "TRR", response == .env$res, model == .env$mdl),
-      lim = ylims, fig_title = paste(res, mdl, sep = ", ")
-    )
-    if (is.null(figs)) figs <- fig else figs <- figs + fig
-  }
-}
-figs <- (figs + plot_layout(nrow = length(responses)) +
-  plot_annotation(title = "Test-Retest Reliability", tag_levels = "A"))
-print(figs)
-```
-
-Here we plot the difference in TRR between different types of response:
-
-```{r, TRR-res-diff-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
-
-res_diff_dat <- dat %>%
-  filter(Term == "TRR") %>%
-  get_diff_dat(name_term = "response", id_term = c("region", "model"))
-ylims <- range(res_diff_dat$Estimate)
-ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
-
-figs <- NULL
-for (i in seq_along(responses)) {
-  if (i == 1) next
-  for (j in seq_along(models)) {
-    res <- responses[[i]]
-    mdl <- models[[j]]
-    term_name <- paste(res, "-", responses[[1]])
-    fig <- brain_plot(res_diff_dat %>%
-      filter(model == .env$mdl, response == .env$term_name),
-      lim = ylims,
-      fig_title = paste0(term_name, ", ", mdl))
-    if (is.null(figs)) figs <- fig else figs <- figs + fig
-  }
-}
-figs <- (figs + plot_layout(nrow = length(responses) - 1) +
-  plot_annotation(title = "Difference in TRR between responses", tag_levels = "A"))
-print(figs)
-```
-
-and between different models:
-
-```{r, TRR-mdl-diff-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
-
-mdl_diff_dat <- dat %>%
-  filter(Term == "TRR") %>%
-  get_diff_dat(name_term = "model", id_term = c("region", "response"))
-ylims <- range(mdl_diff_dat$Estimate)
-ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
-
-figs <- NULL
-for (i in seq_along(responses)) {
-  for (j in seq_along(models)) {
-    if (j == 1) next
-    res <- responses[[i]]
-    mdl <- models[[j]]
-    term_name <- paste(mdl, "-", models[[1]])
-    fig <- brain_plot(mdl_diff_dat %>%
-      filter(response == .env$res, model == .env$term_name),
-      lim = ylims,
-      fig_title = paste0(res, ", ", term_name))
-    if (is.null(figs)) figs <- fig else figs <- figs + fig
-  }
-}
-figs <- (figs + plot_layout(nrow = length(responses)) +
-  plot_annotation(title = "Difference in TRR between models", tag_levels = "A"))
-print(figs)
-```
-
 ### Distribution Plots
 
 Here we plot the distribution of TRR over 32 ROIs for each response type and model:
@@ -266,6 +182,87 @@ figs + plot_layout(nrow = 1, guides = "collect") +
   plot_annotation(title = "Test-Retest Reliability over ROIs", tag_levels = "A")
 ```
 
+### Brain Plots
+
+Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables and models:
+
+```{r, TRR-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+
+ylims <- range(dat %>%
+  filter(Term == "TRR") %>%
+  select(Estimate)
+)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
+figs <- NULL
+for (i in seq_along(responses)) {
+  for (j in seq_along(models)) {
+    res <- responses[[i]]
+    mdl <- models[[j]]
+    fig <- brain_plot(
+      dat %>% filter(Term == "TRR", response == .env$res, model == .env$mdl),
+      lim = ylims, fig_title = paste(res, mdl, sep = ", ")
+    )
+    if (is.null(figs)) figs <- fig else figs <- figs + fig
+  }
+}
+figs <- (figs + plot_layout(nrow = length(responses)) +
+  plot_annotation(title = "Test-Retest Reliability", tag_levels = "A"))
+print(figs)
+```
+
+Here we plot the difference in TRR between different types of response:
+
+```{r, TRR-res-diff-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+
+ylims <- range(res_diff_dat$Estimate)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
+figs <- NULL
+for (i in seq_along(responses)) {
+  if (i == 1) next
+  for (j in seq_along(models)) {
+    res <- responses[[i]]
+    mdl <- models[[j]]
+    term_name <- paste(res, "-", responses[[1]])
+    fig <- brain_plot(res_diff_dat %>%
+      filter(model == .env$mdl, response == .env$term_name),
+      lim = ylims,
+      fig_title = paste0(term_name, ", ", mdl))
+    if (is.null(figs)) figs <- fig else figs <- figs + fig
+  }
+}
+figs <- (figs + plot_layout(nrow = length(responses) - 1) +
+  plot_annotation(title = "Difference in TRR between responses", tag_levels = "A"))
+print(figs)
+```
+
+and between different models:
+
+```{r, TRR-mdl-diff-brain, echo = FALSE, message = FALSE, fig.dim = c(16, 9)}
+
+ylims <- range(mdl_diff_dat$Estimate)
+ylims <- ylims + c(-0.1, 0.1) * (ylims[[2]] - ylims[[1]])
+
+figs <- NULL
+for (i in seq_along(responses)) {
+  for (j in seq_along(models)) {
+    if (j == 1) next
+    res <- responses[[i]]
+    mdl <- models[[j]]
+    term_name <- paste(mdl, "-", models[[1]])
+    fig <- brain_plot(mdl_diff_dat %>%
+      filter(response == .env$res, model == .env$term_name),
+      lim = ylims,
+      fig_title = paste0(res, ", ", term_name))
+    if (is.null(figs)) figs <- fig else figs <- figs + fig
+  }
+}
+figs <- (figs + plot_layout(nrow = length(responses)) +
+  plot_annotation(title = "Difference in TRR between models", tag_levels = "A"))
+print(figs)
+```
+
 ## Comparison with Previous Results
 
 Here we plot the TRR over core32 parcels and compare it with our previous results. The old method is different from the current one in the following ways:
@@ -274,7 +271,7 @@ Here we plot the TRR over core32 parcels and compare it with our previous result
 - Preprocessing: no divisive normalization for each session
 - Response variables:
   - "ridge" is the same as the current one, using `mda::fda()`("ridge")
-  - "rda_full" and "rda_diag" use `sparsediscrim::lda_schafer()` instead of `klaR()` to generate the response variable, with either the full covariance matrix (including noise correlation) or only its diagonal (the signal).
+  - "rda_full" and "rda_diag" use `sparsediscrim::lda_schafer()` instead of `klaR` to generate the response variable, with either the full covariance matrix (including noise correlation) or only its diagonal (the signal).
   - "uv" is not centered nor scaled
 - The TRR model is similar to "fix_sigma" model except that:
   - The model is Gaussian instead of t-distributed

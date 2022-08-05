@@ -1,4 +1,4 @@
-# trr
+# Test-Retest Reliability
 
 Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control dataset
 
@@ -43,3 +43,6 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
     - Each model is about 36M and requires about an hour to train (with 4 chains on 4 cores) without further parallelization.
     - With `mclapply()` over the ROIs we can fit 32 models in about 15 hours. 
     - Currently, we only focus on "baseline" session and the core32 ROIs.
+- Generate summary statistics and plots:
+  - Run `code/inferential/summarize_models.R` to extract the statistics of all models into `out/inferential/schaefer2018_17_400_fsaverage5/core32_stats.rds`, which is a list named by `(model_name, "__", response_name, "__", session)`. Each element in the list is a tibble, containing the statistics.
+  - `knitr::knit()` this file `reports/model_comparison.rmd` to generate the report `reports/model_comparison.md` and relevant figures under `reports/figure`

@@ -45,20 +45,6 @@ We can see that "no_lscov_symm" is the best and "fixed_sigma" is much worse than
 
 ## Test-Retest Reliability
 
-### Brain Plots
-
-Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables and models:
-
-![plot of chunk TRR-brain](figure/TRR-brain-1.png)
-
-Here we plot the difference in TRR between different types of response:
-
-![plot of chunk TRR-res-diff-brain](figure/TRR-res-diff-brain-1.png)
-
-and between different models:
-
-![plot of chunk TRR-mdl-diff-brain](figure/TRR-mdl-diff-brain-1.png)
-
 ### Distribution Plots
 
 Here we plot the distribution of TRR over 32 ROIs for each response type and model:
@@ -73,6 +59,20 @@ This is a similar plot but for the difference between models for each response t
 
 ![plot of chunk TRR-mdl-diff-hist](figure/TRR-mdl-diff-hist-1.png)
 
+### Brain Plots
+
+Here we compare the test-retest reliability (TRR) of high-low control demand contrast among response variables and models:
+
+![plot of chunk TRR-brain](figure/TRR-brain-1.png)
+
+Here we plot the difference in TRR between different types of response:
+
+![plot of chunk TRR-res-diff-brain](figure/TRR-res-diff-brain-1.png)
+
+and between different models:
+
+![plot of chunk TRR-mdl-diff-brain](figure/TRR-mdl-diff-brain-1.png)
+
 ## Comparison with Previous Results
 
 Here we plot the TRR over core32 parcels and compare it with our previous results. The old method is different from the current one in the following ways:
@@ -81,7 +81,7 @@ Here we plot the TRR over core32 parcels and compare it with our previous result
 - Preprocessing: no divisive normalization for each session
 - Response variables:
   - "ridge" is the same as the current one, using `mda::fda()`("ridge")
-  - "rda_full" and "rda_diag" use `sparsediscrim::lda_schafer()` instead of `klaR()` to generate the response variable, with either the full covariance matrix (including noise correlation) or only its diagonal (the signal).
+  - "rda_full" and "rda_diag" use `sparsediscrim::lda_schafer()` instead of `klaR` to generate the response variable, with either the full covariance matrix (including noise correlation) or only its diagonal (the signal).
   - "uv" is not centered nor scaled
 - The TRR model is similar to "fix_sigma" model except that:
   - The model is Gaussian instead of t-distributed
