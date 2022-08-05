@@ -95,7 +95,7 @@ brain_plot <- function(df, stat_term = "Estimate", eff_term = NULL, eff = NULL,
 # - name_term: "model" or "response"
 # - base_level: base level for comparison between `name_term`s, e.g. "uv". By default
 #   it's the first value in `name_term` if `name_term` is not factor, or it's the first
-#   level of `name_term` if `name_term` is a factor.
+#   level that appears in `name_term` if `name_term` is a factor.
 # - val_term: value term, by default "Estimate"
 # - id_term: terms that uniquely define an observation, by default all other terms
 # - pivoting: "long" or "wide", by default "long"
@@ -110,7 +110,7 @@ get_diff_dat <- function(x, name_term, base_level = NA, val_term = "Estimate",
     res <- select(x, .env$name_term, .env$val_term, .env$id_term)
   } else res <- x
   if (is.factor(res[[name_term]])) {
-    term_levels <- levels(res[[name_term]])
+    term_levels <- unique(sort(res[[name_term]]))
   } else term_levels <- unique(res[[name_term]])
   if (is.na(base_level)) base_level <- term_levels[[1]]
 

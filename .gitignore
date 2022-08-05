@@ -53,5 +53,3 @@ scratch/
 ## images
 figs/
 reports/*html
-reports/*.md
-reports/figure
