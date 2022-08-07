@@ -62,12 +62,12 @@ source(here("code", "_funs.R"))
 ## input vars ----
 
 variable <- "hilo_all"
-divnorm_vertex <- TRUE
+divnorm_run <- FALSE
+divnorm_vertex <- FALSE
 divnorm_trial <- FALSE
 demean_trial <- FALSE
 classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
-classifier <- "rda"  ## or "ridge"
 shrinkage_factor_ridge <- 100
 shrinkage_factor_rda <- 0.25
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
@@ -75,7 +75,7 @@ roi_col <- "parcel"  ## "parcel" or "network"
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 n_cores <- 18
-do_waves <- c(1, 2)
+do_waves <- c(2, 3)
 subjs <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
 )
@@ -99,7 +99,8 @@ print(noquote(paste0("num resamples: ", n_resamples)))
 
 ## out file name
 file_name <- paste0(
-  "projections__stroop__", classifier, "__n_resamples", n_resamples,
+  "projections__stroop__rda__n_resamples", n_resamples,
+  switch(divnorm_run + 1, "", "__divnorm_run"),
   switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
   switch(divnorm_trial + 1, "", "__divnorm_trial"),
   switch(demean_trial + 1, "", "__demean_trial"),
@@ -203,12 +204,16 @@ allres <-
         ## regress nuisance variance:
         ## each vertex may have different mean in different scanning runs, independent of the different trialtypes
         ## here we estimate those means and remove them from each vertex
-        X <- cbind(indicator(y_good) * is_run1_good, indicator(y_good) * !is_run1_good)
-        mu <- coef(.lm.fit(x = X, y = trials_session_good))  ## yeilds class means per run
-        ## mean of class means per run (vertex by run):
-        mu_bar <- average(t(mu), rep(c("run1", "run2"), each = n_classes))
-        mu_bar <- tcrossprod(indicator(run_labels), mu_bar)  ## expand to match dims of (non-subsetted) data
-        trials_session_c <- trials_session - mu_bar  ## center
+        if (divnorm_run) {
+          X <- cbind(indicator(y_good) * is_run1_good, indicator(y_good) * !is_run1_good)
+          mu <- coef(.lm.fit(x = X, y = trials_session_good))  ## yeilds class means per run
+          ## mean of class means per run (vertex by run):
+          mu_bar <- average(t(mu), rep(c("run1", "run2"), each = n_classes))
+          mu_bar <- tcrossprod(indicator(run_labels), mu_bar)  ## expand to match dims of (non-subsetted) data
+          trials_session_c <- trials_session - mu_bar  ## center
+        } else {
+          trials_session_c <- trials_session
+        }
         trials_session_c <- t(trials_session_c)
         ## store class labels as colnames:
         #colnames(trials_session_c) <- paste0(y, "__", run_labels, "__", session_val)
