@@ -49,6 +49,8 @@ subjs_wave12_all <- data.table::fread(here::here("in", "subjects_wave12_all.txt"
 subjs_wave13_all <- data.table::fread(here::here("in", "subjects_wave13_all.txt"), header = FALSE)$V1
 subjs_wave23_all <- data.table::fread(here::here("in", "subjects_wave23_all.txt"), header = FALSE)$V1
 subjs_wave12_good <- data.table::fread(here::here("in", "subjects_wave12_good.txt"), header = FALSE)$V1
+subjs_old_complete <- data.table::fread(here::here("in", "subjects_old_complete.txt"),
+  header = FALSE)$V1  # The `subjs_wave12_complete` in previous codes. 18 subjects.
 
 ## DMCC5009144: DMCC2 (wave1) Stroop baseline missing
 ## 197449: Jo recommends not using Stroop baseline

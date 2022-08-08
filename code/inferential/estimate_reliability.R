@@ -54,7 +54,7 @@ source(here("code", "_funs.R"))
 
 n_core_brm <- 4  # Number of cores for parallelization within brm()
 roi_idx <- core32  ## which ROIs to use
-n_cores <- 20
+n_cores <- 16
 file_refit <- "on_change"  ## "never", "always", see help(brm)
 tasks <- "Stroop"
 sessions <- c("baseline", "proactive", "reactive")
@@ -69,7 +69,7 @@ model_names <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 
 ## Input from ./code/spatial/multi...task.R:
 fname <- here("out", "spatial",
-  "projections__stroop__rda__n_resamples100__divnorm_vertex__cv_allsess.csv"
+  "projections__stroop__rda__n_resamples100__cv_allsess.csv"
 )
 
 # Atlas
@@ -86,7 +86,7 @@ if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
 }
 rois <- rois[roi_idx]
 
-out_path <- here("out", "inferential", atlas_nm)
+out_path <- here("out", "inferential", "wo_divnorm")
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
@@ -95,7 +95,7 @@ stopifnot(n_core_brm <= n_cores)
 ###################### Load and prepare data #########################
 
 # Select part of the ROIs
-d <- read_csv(fname) %>% filter(roi %in% .env$rois)
+d <- read_csv(fname) %>% filter(roi %in% .env$rois) %>% na.omit()
 
 
 # Convert to wide form and create regressors
@@ -137,7 +137,7 @@ needs_refit <- enlist(combo_paste(model_names, "__", response_names, "__", sessi
 # Debugging
 if (FALSE) {
   session <- "baseline"
-  model_name <- "full"
+  model_name <- "fixed_sigma"
   response_name <- response_names[[1]]
 }
 
