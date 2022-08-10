@@ -295,7 +295,7 @@ for (res in responses) {
     ylim(lim[[1]], lim[[2]])
   if (is.null(figs)) figs <- fig else figs <- figs + fig
 }
-figs + plot_layout(nrow = 2) +
+figs <- figs + plot_layout(nrow = 2) +
   plot_annotation(title = "TRR from different models for different response variables")
 if (debugging) ggsave("tmp.png", plot = figs, width = 16, height = 9) else figs
 ```

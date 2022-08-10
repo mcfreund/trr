@@ -194,4 +194,4 @@ Violin plot:
 
 ## Comparison
 
-![plot of chunk comparison](figure/comparison-1.png)![plot of chunk comparison](figure/comparison-2.png)
+![plot of chunk comparison](figure/comparison-1.png)
