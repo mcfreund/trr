@@ -109,10 +109,30 @@ trr_all_subjs <- bind_rows(lapply(val_terms, function(x) {
     ungroup()
 }), .id = "response")
 
-# Difference between two models
-trr_diff <- get_diff_dat(trr_summary, "model", models[[1]], "trr")
-trr_full <- bind_rows(trr_summary, trr_diff)
-all_models <- unique(trr_full$model)
+# TRR for each response type, more or fewer subjects, with or without normalization
+trr_full <- bind_rows(list(subset18 = trr_summary, full = trr_all_subjs),
+  .id = "subjects")
+clim <- max(range(trr_full$trr))
+figs <- NULL
+for (res in responses) {
+  tmp <- trr_full %>%
+    filter(response == .env$res) %>%
+    filter(region %in% core32_roi) %>%
+    pivot_wider(id_cols = c(region, subjects), names_from = model, values_from = trr)
+  fig <- ggplot(tmp) +
+    aes(x = w_divnorm, y = wo_divnorm, color = subjects) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1) +
+    labs(x = "with divisive normalization", y = "without divisive normalization",
+      title = res) +
+    xlim(-clim, clim) +
+    ylim(-clim, clim)
+  if (is.null(figs)) figs <- fig else figs <- figs + fig
+}
+figs <- figs + plot_layout(nrow = 1, guides = "collect") +
+  plot_annotation(title = "TRR estimated by different methods over core32 regions")
+figs
+ggsave(here("out", "spatial", "TRR_res_core32.png"), width = 15, height = 6)
 
 # Difference between ridge and uv for both models
 trr_res_diff <- get_diff_dat(trr_summary, "response", "uv", "trr") %>%
@@ -135,6 +155,11 @@ fig <- ggplot(all_trr, aes(x = w_divnorm, y = wo_divnorm, color = subjects)) +
   ylim(-clim, clim)
 fig
 ggsave(here("out", "spatial", "TRR_ridge_vs_uv_core32.png"), width = 8, height = 6)
+
+# Difference between two models
+trr_diff <- get_diff_dat(trr_summary, "model", models[[1]], "trr")
+trr_full <- bind_rows(trr_summary, trr_diff)
+all_models <- unique(trr_full$model)
 
 # # Plotting TRRs
 # clim <- range(trr_summary$trr)
