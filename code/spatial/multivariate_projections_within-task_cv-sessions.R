@@ -2,6 +2,27 @@
 #
 # Author: Michael Freund
 #
+#
+# 07/21/2022 update:
+#
+# Problem: ldf() use the `.covpooled` of lda models, which cannot be estimated when data contain NAs
+# See https://github.com/cran/klaR/blob/master/R/rda.R#L526-L531.
+#
+# Two reason:
+#
+# 1. Bad trials, e.g., Subject 7 (448347) wave 2 Stroop baseline trial 93 & 94.
+#  This should be fixed after the update of `resampleing_trials.r`.
+#
+# 2. Divide by 0 error when normalizing vertices with no fluctuation.
+#  We did not prevent this, since zero-fluctuation vertices will be removed later
+#  (search for `is_good_vertex`) even if they become all NAs.
+#
+# And we check for any remaining NAs (e.g., due to `divnorm_trials`) before training.
+#
+# 07/20/2022 update:
+#
+# Use `klaR`` instead of the (problematic) `sparsediscrim`` for classification.
+#
 # 05/13/2022 updated by Ruiqi Chen:
 #
 # This script trains a linear classifier for each subject * task * region using the
@@ -20,7 +41,7 @@
 # between predicted posterior probability for high control over low control trial
 # type for each trial in the baseline condition.
 #
-# To-do: the training returns a few NAs for "schafer_full" and "schafer_diag" and
+# The training returns a few NAs for "schafer_full" and "schafer_diag" and
 # the reason is not clear yet.
 
 library(here)
@@ -29,10 +50,10 @@ library(data.table)
 library(abind)
 library(doParallel)
 library(foreach)
+library(mfutils)
 library(mda)
 library(klaR)
 library(pROC)
-library(mfutils)
 
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
@@ -41,45 +62,28 @@ source(here("code", "_funs.R"))
 ## input vars ----
 
 variable <- "hilo_all"
-divnorm_vertex <- TRUE
+divnorm_run <- FALSE
+divnorm_vertex <- FALSE
 divnorm_trial <- FALSE
 demean_trial <- FALSE
-file_name_resamples <- here("out", "spatial", "trialidx_stroop_congruency.RDS")
 classes <- c("lo", "hi")  ## -, +
 tasks <- "Stroop"
-classifier <- "rda"  ## or "ridge"
 shrinkage_factor_ridge <- 100
-shrinkage_factor_rda <- 1/4
+shrinkage_factor_rda <- 0.25
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
-subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-do_waves <- c(1, 2)
-n_cores <- 6
-
-## read resampled trial indices
-resamples <- readRDS(here("out", "spatial", "trialidx_stroop_congruency.RDS"))
-n_resamples <- nrow(resamples[[1]])
-print(noquote(paste0("num resamples: ", n_resamples)))
-
-## out file name
-file_name <- switch(
-  grepl("^schafer", classifier) + 1,
-  paste0(
-    "projections__stroop__rda_lambda_", shrinkage_factor, "__n_resamples", n_resamples,
-    switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
-    switch(divnorm_trial + 1, "", "__divnorm_trial"),
-    switch(demean_trial + 1, "", "__demean_trial"),
-    "__cv_allsess.csv"
-    ), ## F
-  paste0(
-    "projections__stroop__", classifier, "__n_resamples", n_resamples,
-    switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
-    switch(divnorm_trial + 1, "", "__divnorm_trial"),
-    switch(demean_trial + 1, "", "__demean_trial"),
-    "__cv_allsess.csv"
-    )  ## TRUE
+n_cores <- 18
+do_waves <- c(2, 3)
+subjs <- switch(toString(do_waves),
+  "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
+)
+input_fname <- here("in", "behav",
+  paste0("behavior-and-events_wave", do_waves[1], do_waves[2], "_alltasks.csv")
+)
+file_name_resamples <- here("out", "spatial",
+  paste0("trialidx_stroop_congruency_wave", do_waves[1], do_waves[2], ".RDS")
 )
 
 ## atlas info and other constants
@@ -87,6 +91,21 @@ atlas <- get(atlas_nm)
 rois <- unique(atlas$key[[roi_col]])
 waves <- waves[do_waves]
 n_classes <- length(classes)
+
+## read resampled trial indices
+resamples <- readRDS(file_name_resamples)
+n_resamples <- nrow(resamples[[1]])
+print(noquote(paste0("num resamples: ", n_resamples)))
+
+## out file name
+file_name <- paste0(
+  "projections__stroop__rda__n_resamples", n_resamples,
+  switch(divnorm_run + 1, "", "__divnorm_run"),
+  switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
+  switch(divnorm_trial + 1, "", "__divnorm_trial"),
+  switch(demean_trial + 1, "", "__demean_trial"),
+  "__cv_allsess_wave", do_waves[1], do_waves[2], ".csv"
+)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
@@ -101,18 +120,9 @@ alltrials <- read_results(
 ## read trial data:
 ## behav$hilo indicates high-demand (incongruent) vs low-demand (congruent) for only bias trialtypes
 ## behav$hilo_all indicates high-demand (incongruent) vs low-demand (congruent) for both bias and pc50 trialtypes
-behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_alltasks.csv"), na.strings = c("", "NA"))
+behav <- fread(input_fname, na.strings = c("", "NA"))
 cols <- c("subj", "wave", "task", "session", "trialtype", variable, "trialnum")
 behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols]
-
-## for dev/interactive use:
-if (FALSE) {
-  subj_i <- which(subjs == "448347")
-  task_i <- 1
-  wave_i <- 2
-  session_i <- 1
-  roi_i <- 1
-}
 
 
 ## utilities ----
@@ -128,6 +138,16 @@ ldf <- function(object, newdata, class_names = c("hi", "lo")) {
   w <- solve(sigmahat_reg) %*% (object$means[, class_names] %*% rbind(1, -1))
   w <- w / sqrt(sum(w^2))  ## scale to unit length
   newdata %*% w
+}
+
+
+## for dev/interactive use:
+if (FALSE) {
+  subj_i <- which(subjs == "448347")
+  task_i <- 1
+  wave_i <- 2
+  session_i <- 1
+  roi_i <- 1
 }
 
 
@@ -153,8 +173,8 @@ allres <-
       names(trials) <- c("baseline", "proactive", "reactive")
 
       ## get good trials, class lables, and regress nuisance variance
-      data_clean <- enlist(sessions)
-      trial_idxs <- enlist(sessions)
+      data_clean <- mfutils::enlist(sessions)
+      trial_idxs <- mfutils::enlist(sessions)
       for (session_i in seq_along(trials)) {
 
         session_val <- sessions[session_i]
@@ -184,12 +204,16 @@ allres <-
         ## regress nuisance variance:
         ## each vertex may have different mean in different scanning runs, independent of the different trialtypes
         ## here we estimate those means and remove them from each vertex
-        X <- cbind(indicator(y_good) * is_run1_good, indicator(y_good) * !is_run1_good)
-        mu <- coef(.lm.fit(x = X, y = trials_session_good))  ## yeilds class means per run
-        ## mean of class means per run (vertex by run):
-        mu_bar <- average(t(mu), rep(c("run1", "run2"), each = n_classes))
-        mu_bar <- tcrossprod(indicator(run_labels), mu_bar)  ## expand to match dims of (non-subsetted) data
-        trials_session_c <- trials_session - mu_bar  ## center
+        if (divnorm_run) {
+          X <- cbind(indicator(y_good) * is_run1_good, indicator(y_good) * !is_run1_good)
+          mu <- coef(.lm.fit(x = X, y = trials_session_good))  ## yeilds class means per run
+          ## mean of class means per run (vertex by run):
+          mu_bar <- average(t(mu), rep(c("run1", "run2"), each = n_classes))
+          mu_bar <- tcrossprod(indicator(run_labels), mu_bar)  ## expand to match dims of (non-subsetted) data
+          trials_session_c <- trials_session - mu_bar  ## center
+        } else {
+          trials_session_c <- trials_session
+        }
         trials_session_c <- t(trials_session_c)
         ## store class labels as colnames:
         #colnames(trials_session_c) <- paste0(y, "__", run_labels, "__", session_val)
@@ -198,11 +222,11 @@ allres <-
         if (divnorm_vertex) {
           ## divisive normalize each vertex by residual sdev over trials? (univariate prewhiten)
           eps <- resid(.lm.fit(x = indicator(behav_session$trialtype[idx]), y = t(trials_session_c[, idx])))
-          sdev <- sqrt(Var(eps, 2))
+          sdev <- sqrt(Var(eps, 2))  # Vertices with no BOLD will be removed by `is_good_vertex` later
           trials_session_c <- sweep(trials_session_c, 1, sdev, "/")
         }
 
-        data_clean[[session_i]] <- trials_session_c
+        data_clean[[session_i]] <- trials_session_c  # Note: remove bad trials by resampled idx, not here
 
       }
 
@@ -218,7 +242,7 @@ allres <-
       }
 
 
-      projs_all <- enlist(sessions)
+      projs_all <- mfutils::enlist(sessions)
       for (test in sessions) {
 
         train <- setdiff(sessions, test)
@@ -227,11 +251,11 @@ allres <-
         names(resamples_train) <- train
 
         ## loop over ROIs and train/test models:
-        projs <- enlist(rois)
+        projs <- mfutils::enlist(rois)
         for (roi_i in seq_along(rois)) {
 
-          print(paste("Now processing", task_val, "task for subject", subj_val, wave_val,
-            "in region", roi_i, ":", rois[[roi_i]]))
+          print(paste("Testing on", task_val, test, "for subject", subj_val, wave_val,
+            "region", roi_i, ":", rois[[roi_i]]))
 
           ## extract roi_i for each session
           data_clean_roi <- lapply(data_clean_rois, "[[", rois[roi_i])  ## list of matrices of vertex by trial
@@ -239,7 +263,7 @@ allres <-
           ## remove vertices with no BOLD variance
           is_good_vertex_session <- lapply(data_clean_roi, function(x) !is_equal(Var(x, 1, na.rm = TRUE), 0))
           is_good_vertex <- Reduce("&", is_good_vertex_session)  ## intersection
-          stopifnot(mean(is_good_vertex) > 1/4)  ## stop if less than 1/4 vertices in ROI do not have signal
+          stopifnot(mean(is_good_vertex) > 1/4)  ## stop if more than 1/4 vertices in ROI do not have signal
           data_clean_roi_goodverts <- lapply(data_clean_roi, function(x) x[is_good_vertex, ])
 
           ## data
@@ -261,6 +285,12 @@ allres <-
               idx2 <- resamples_train[[2]][i, ]
               X <- rbind(l_train[[1]][idx1, ], l_train[[2]][idx2, ])
               y <- rownames(X)
+
+              if (any(is.na(X))) {
+                stop(paste("NA found in subject", subj_val,
+                  wave_val, "session", session_val))
+              }
+
               fit_ridge <- mda::fda(y ~ X, method = gen.ridge, lambda = shrinkage_factor_ridge)
               fit_rda <- klaR::rda(x = X, grouping = y, gamma = shrinkage_factor_rda, lambda = 1)
               return(list(ridge = fit_ridge, rda = fit_rda))
@@ -314,10 +344,12 @@ allres <-
     },
 
     error = function(e) {
+      msg <- paste("Error in task", tasks[task_i],
+        "subject", subjs[subj_i], "wave", waves[wave_i], ":", e)
       print("")
-      print(e)
+      print(msg)
       print("")
-      list(NA)
+      list(msg)
     }
 
   )

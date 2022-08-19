@@ -15,8 +15,9 @@ library(gifti)
 source(here("code", "_constants.R"))
 source(here("code", "_funs.R"))
 
-subjs <- subjs_wave12_all
-do_waves <- c(1, 2)
+subjs <- subjs_wave23_all
+do_waves <- c(2, 3)
+do_tasks <- c("Stroop")  # Only Stroop
 resid_type <- "errts"
 
 ## iterators for dev:
@@ -35,8 +36,9 @@ resid_type <- "errts"
 ## Further, rows must sum to one.
 
 waves <- waves[do_waves]
+tasks <- do_tasks
 
-A_list <- enlist(combo_paste(waves, tasks, sessions, subjs))
+A_list <- enlist(combo_paste(waves, tasks, sessions, subjs, sep = "_"))
 
 for (wave_i in seq_along(waves)) {
   for (task_i in seq_along(tasks)) {
@@ -45,8 +47,8 @@ for (wave_i in seq_along(waves)) {
       name_wave_i <- waves[wave_i]
       name_task_i <- tasks[task_i]
       name_session_i <- sessions[session_i]
-      dir_image <- file.path("/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS", wavedir_image[wave_i], "fMRIPrep_AFNI_ANALYSIS")
-      dir_evts <- file.path("/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/EVTS", wavedir_evts[wave_i])
+      dir_image <- file.path("/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS", wavedir_image[name_wave_i], "fMRIPrep_AFNI_ANALYSIS")
+      dir_evts <- file.path("/data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/EVTS", wavedir_evts[name_wave_i])
 
       n_tr <- n_trs[paste0(name_task_i, "_", name_session_i)]
       n_trial <- n_trialspr[paste0(name_task_i, "_", name_session_i)]*2
@@ -121,7 +123,7 @@ for (wave_i in seq_along(waves)) {
         
         ## save:
         
-        nm <- paste0(waves[wave_i], "_", name_task_i, "_", name_session_i, "_", subjs[subj_i])
+        nm <- paste0(name_wave_i, "_", name_task_i, "_", name_session_i, "_", subjs[subj_i])
         A_list[[nm]] <- A
         # image(A)  ## view
         
@@ -137,7 +139,7 @@ for (wave_i in seq_along(waves)) {
 # name_wave_i <- waves[wave_i]
 # name_task_i <- tasks[task_i]
 
-cl <- makeCluster(20, type = "FORK")
+cl <- makeCluster(6, type = "FORK")
 registerDoParallel(cl)
 res <- 
   foreach(subj_i = seq_along(subjs), .inorder = FALSE) %:%
@@ -149,13 +151,13 @@ res <-
 
     name_subj_i <- subjs[subj_i]
     name_wave_i <- waves[wave_i]
-    name_task_i <- tasks[task_i]    
+    name_task_i <- tasks[task_i]
     name_session_i <- sessions[session_i]
-    name_glm <- paste0(name_session_i, "_", "null_2rpm_", waves[wave_i])
+    name_glm <- paste0(name_session_i, "_", "null_2rpm_", name_wave_i)
     dir_glm <- here("out", "timeseries", name_subj_i, "RESULTS", name_task_i, name_glm)
     n_tr <- n_trs[paste0(name_task_i, "_", name_session_i)]
     n_trial <- n_trialspr[paste0(name_task_i, "_", name_session_i)]*2
-    nm <- paste0(waves[wave_i], "_", name_task_i, "_", name_session_i, "_", subjs[subj_i])
+    nm <- paste0(name_wave_i, "_", name_task_i, "_", name_session_i, "_", name_subj_i)
     A <- A_list[[nm]]
     
     ## load data:
@@ -166,7 +168,7 @@ res <-
     
     ## check for unexpected dimensions:
     dims_bad <- any(dim(E) != c(n_tr, n_vert))
-    if (dims_bad) stop ("bad dims: error time-series")
+    if (dims_bad) stop(paste("Bad dims: error time-series for", eps_name[1]))
     
     ## average and save:
     

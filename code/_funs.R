@@ -255,6 +255,23 @@ get_model_info <- function(model_name, response_name, session_name) {
         )
     )
 
+  } else if (model_name == "fixed_sigma") {
+
+    res <- list(
+      model_prefix =
+        paste0(
+          "hbm__response_", response_name, "__family_student__sigma_fixed__ranef_symm__lscov_none__session_",
+          session_name
+          ),
+      formula_string =
+        paste0(
+          " ~ ",
+          "0 + mean_wave1 + mean_wave2 + hilo_wave1 + hilo_wave2 + ",
+          "(0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
+        ),
+      formula_sigma = formula(sigma ~ 1)
+    )
+
   }
 
   res
