@@ -220,3 +220,59 @@ m2 <- brm(
   family = student()
 )
 ```
+
+
+# Model 3: single session, full model, sans location-scale correlations
+
+
+## notation
+
+$$
+\begin{equation}
+	\begin{split}
+		& y_{tcrp} \sim \mathcal{T}(\alpha_{crp}, \nu_{crp}) \\
+		& \alpha_{crp} = \mathbf{m} + \boldsymbol{\mu}_p \\
+		& \text{log } \nu_{crp} = \boldsymbol{\gamma} + \boldsymbol{\tau}_{p} \\
+		& (\boldsymbol{\mu}, \boldsymbol{\tau})_p^{\intercal} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma})\\
+		& \boldsymbol{\Sigma} = 
+		  \begin{bmatrix}
+        \Sigma_{11} & \dots & \Sigma_{14} & \\
+        \vdots & \ddots & \vdots & \\
+        \Sigma_{41} & \dots  & \Sigma_{44} & \\
+        & & & \Sigma_{55} & \dots & \Sigma_{58} & \\
+        & & & \vdots & \ddots & \vdots & \\
+        & & & \Sigma_{85} & \dots  & \Sigma_{88} &
+      \end{bmatrix} \\
+	\end{split}
+\end{equation}
+$$
+
+# Model 4: single session, full model, sans location-scale correlations, with chen2021-style correlations
+
+
+## notation
+
+- conditions re-parameterized to contrast-coding scheme: $c \in \{\text{mean}, \text{stroop}\}$,
+where $\text{mean}$ refers to the average score (incongruent + congruent), and stroop refers to the contrast (incongruent - congruent)/2. 
+
+$$
+\begin{equation}
+	\begin{split}
+		& y_{tcrp} \sim \mathcal{T}(\alpha_{crp}, \nu_{crp}) \\
+		& \alpha_{crp} = \mathbf{m} + \boldsymbol{\mu}_p \\
+		& \text{log } \nu_{crp} = \boldsymbol{\gamma} + \boldsymbol{\tau}_{p} \\
+		& (\boldsymbol{\mu}, \boldsymbol{\tau})_p^{\intercal} \sim \mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma})\\
+		& \boldsymbol{\Sigma} = 
+		  \begin{bmatrix}
+        \Sigma_{11} & \Sigma_{12} \\
+        \Sigma_{21} & \Sigma_{22} \\
+        & & \Sigma_{33} & \Sigma_{34} \\
+        & & \Sigma_{43} & \Sigma_{44} \\
+        & & & & \Sigma_{55} & \Sigma_{56} \\
+        & & & & \Sigma_{65} & \Sigma_{66} \\
+        & & & & & & \Sigma_{77} & \Sigma_{78} \\
+        & & & & & & \Sigma_{87} & \Sigma_{88} \\
+      \end{bmatrix} \\
+	\end{split}
+\end{equation}
+$$
