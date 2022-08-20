@@ -277,3 +277,8 @@ get_model_info <- function(model_name, response_name, session_name) {
   res
 
 }
+
+max_aposteriori <- function(x) {
+  d <- density(x)
+  d$x[which.max(d$y)]
+}
