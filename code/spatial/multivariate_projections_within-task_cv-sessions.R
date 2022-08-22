@@ -321,7 +321,7 @@ allres <-
             data.table(
               value = proj_bar,
               variable = y_test,
-              trial = seq_along(proj_bar),  ## trial_idxs[[test]]
+              trial = seq_len(dim(proj_bar)[[1]]),  ## trial_idxs[[test]]
               ## summarize performance with auc:
               auc_ridge = roc(y_test, proj_bar[, "ridge"], direction = "<", levels = classes)$auc,
               auc_rda = roc(y_test, proj_bar[, "rda"], direction = "<", levels = classes)$auc,
