@@ -62,7 +62,7 @@ source(here("code", "_funs.R"))
 ## input vars ----
 
 variable <- "hilo_all"
-divnorm_run <- FALSE
+demean_run <- TRUE
 divnorm_vertex <- FALSE
 divnorm_trial <- FALSE
 demean_trial <- FALSE
@@ -100,7 +100,7 @@ print(noquote(paste0("num resamples: ", n_resamples)))
 ## out file name
 file_name <- paste0(
   "projections__stroop__rda__n_resamples", n_resamples,
-  switch(divnorm_run + 1, "", "__divnorm_run"),
+  switch(demean_run + 1, "", "__demean_run"),
   switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
   switch(divnorm_trial + 1, "", "__divnorm_trial"),
   switch(demean_trial + 1, "", "__demean_trial"),
@@ -204,7 +204,7 @@ allres <-
         ## regress nuisance variance:
         ## each vertex may have different mean in different scanning runs, independent of the different trialtypes
         ## here we estimate those means and remove them from each vertex
-        if (divnorm_run) {
+        if (demean_run) {
           X <- cbind(indicator(y_good) * is_run1_good, indicator(y_good) * !is_run1_good)
           mu <- coef(.lm.fit(x = X, y = trials_session_good))  ## yeilds class means per run
           ## mean of class means per run (vertex by run):
