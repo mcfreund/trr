@@ -109,7 +109,7 @@ formula_string <-
 formula_sigma <- formula(sigma ~ 1)
 ```
 
-We made the same plots, but this time we only include core32 regions (same below).
+We made the same plots, but this time we only include core32 regions, and show the mean of the data by a red dot (same below).
 
 
 ```

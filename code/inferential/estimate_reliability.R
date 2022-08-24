@@ -58,7 +58,7 @@ n_cores <- 16
 file_refit <- "on_change"  ## "never", "always", see help(brm)
 tasks <- "Stroop"
 sessions <- c("baseline", "proactive", "reactive")
-response_names <- c("uv")  # Note: currently must be c("rda"), c("ridge") or c("uv")
+response_names <- c("rda")  # Note: currently must be c("rda"), c("ridge") or c("uv")
 vterm <- switch(response_names[[1]],
   rda = "value.rda",
   ridge = "value.ridge",
@@ -69,8 +69,11 @@ model_names <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 
 ## Input from ./code/spatial/multi...task.R:
 fname <- here("out", "spatial",
-  "projections__stroop__rda__n_resamples100__cv_allsess.csv"
+  "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"
 )
+
+# Output path
+out_path <- here("out", "inferential", "wo_divnorm")
 
 # Atlas
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
@@ -85,8 +88,6 @@ if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
   stop("not configured for atlas")
 }
 rois <- rois[roi_idx]
-
-out_path <- here("out", "inferential", "wo_divnorm")
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)

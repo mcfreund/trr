@@ -145,7 +145,7 @@ formula_string <-
 formula_sigma <- formula(sigma ~ 1)
 ```
 
-We made the same plots, but this time we only include core32 regions (same below).
+We made the same plots, but this time we only include core32 regions, and show the mean of the data by a red dot (same below).
 
 ```{r, fixed-sigma-scatter, echo = FALSE, fig.dim = c(8, 6)}
 
@@ -158,9 +158,11 @@ print("TRRs estimated from 'fixed_sigma' model:")
 fs_new
 
 lim <- range(fs_new[, c("ridge", "uv")])
+fs_new_mean <- summarise(fs_new, ridge = mean(ridge), uv = mean(uv))
 fig <- ggplot(fs_new) +
   aes(x = uv, y = ridge) +
   geom_point(alpha = 0.5) +
+  geom_point(data = fs_new_mean, col = "red") +
   geom_abline(intercept = 0, slope = 1) +
   geom_rug() +
   labs(x = "uv", y = "ridge",
@@ -176,7 +178,7 @@ Here we compare the results when we either normalize the data before calculating
 fs_old <- readRDS(here("out", "inferential", "wo_divnorm", "core32_stats.rds"))
 fs_old <- bind_rows(fs_old, .id = "model__response__session") %>%
   separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
-  filter(Term == "TRR") %>%
+  filter(Term == "TRR", response %in% c("ridge", "uv")) %>%
   select(response, region, Estimate) %>%
   pivot_wider(names_from = response, values_from = Estimate)
 fs_all <- bind_rows(list(wo = fs_old, w = fs_new), .id = "prep") %>%
@@ -185,9 +187,11 @@ fs_diff <- fs_all %>%
   mutate(ridge_diff = ridge_w - ridge_wo, uv_diff = uv_w - uv_wo)
 
 lim <- range(fs_diff[, c("ridge_diff", "uv_diff")])
+fs_diff_mean <- summarise(fs_diff, ridge_diff = mean(ridge_diff), uv_diff = mean(uv_diff))
 fig <- ggplot(fs_diff) +
   aes(x = uv_diff, y = ridge_diff) +
   geom_point(alpha = 0.5) +
+  geom_point(data = fs_diff_mean, col = "red") +
   geom_abline(intercept = 0, slope = 1) +
   geom_abline(intercept = 0, slope = -1, linetype = "dotted") +
   geom_rug() +
