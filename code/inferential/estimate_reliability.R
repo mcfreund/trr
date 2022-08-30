@@ -66,6 +66,9 @@ vterm <- switch(response_names[[1]],
 )
 model_names <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 
+# Atlas
+atlas_nm <- "schaefer2018_17_400_fsaverage5"
+roi_col <- "parcel"  ## "parcel" or "network"
 
 ## Input from ./code/spatial/multi...task.R:
 fname <- here("out", "spatial",
@@ -73,11 +76,8 @@ fname <- here("out", "spatial",
 )
 
 # Output path
-out_path <- here("out", "inferential", "wo_divnorm")
+out_path <- here("out", "inferential", atlas_nm)
 
-# Atlas
-atlas_nm <- "schaefer2018_17_400_fsaverage5"
-roi_col <- "parcel"  ## "parcel" or "network"
 
 # ROIs
 if (atlas_nm == "schaefer2018_17_400_fsaverage5") {

@@ -15,29 +15,79 @@ output:
 
 ## Fitting Statistics
 
-First we compare the Bayesian R-squared of the models (see [here](https://paul-buerkner.github.io/brms/reference/bayes_R2.brmsfit.html)). Each line is for one ROI. The higher the value, the better the fit.
+First we check the outliers in the data by the fitting statistics:
 
-![plot of chunk Bayes-R2](figure/Bayes-R2-1.png)
+![plot of chunk outliers](figure/outliers-1.png)
+
+Apparently there are two outliers with unexpectedly high Bayes_R2 but unexpectedly low elpd_loo (which is strange - need to check the data). For the sake of consistency, we decided to remove the two regions associated with the outliers from the data:
+
+
+```r
+outlier_dat <- dat %>% filter(Term == "elpd_loo", Estimate < -60000)
+outlier_dat
+```
+
+```
+## # A tibble: 2 x 16
+##   model         response session  Term     Estimate Est.Error CI.Lower CI.Upper Q.Lower Q.Upper   MAP  rhat ess_bulk ess_tail Grouping region                     
+##   <ord>         <ord>    <chr>    <chr>       <dbl>     <dbl>    <dbl>    <dbl>   <dbl>   <dbl> <dbl> <dbl>    <dbl>    <dbl> <chr>    <chr>                      
+## 1 no_lscov_symm rda      baseline elpd_loo  -65709.      702.       NA       NA      NA      NA    NA    NA       NA       NA <NA>     17Networks_LH_ContA_PFClv_2
+## 2 no_lscov_symm rda      baseline elpd_loo  -77219.      556.       NA       NA      NA      NA    NA    NA       NA       NA <NA>     17Networks_RH_ContA_PFCl_3
+```
+
+```r
+outliers <- outlier_dat$region
+dat <- dat %>% filter(!region %in% .env$outliers)
+```
+
+Then we compare the Bayesian R-squared of the models (see [here](https://paul-buerkner.github.io/brms/reference/bayes_R2.brmsfit.html)). Each line is for one ROI. The higher the value, the better the fit.
+
 
 ```
 ## # A tibble: 4 x 2
 ##   model         mean_R2
 ##   <ord>           <dbl>
-## 1 fixed_sigma   0.0108 
-## 2 no_lscov_symm 0.0103 
-## 3 no_lscov      0.00982
-## 4 full          0.00951
+## 1 fixed_sigma   0.00722
+## 2 no_lscov_symm 0.00636
+## 3 no_lscov      0.00544
+## 4 full          0.00524
 ```
+
+![plot of chunk Bayes-R2](figure/Bayes-R2-1.png)
 
 We can see that generally, fixed_sigma > no_lscov_symm > no_lscov > full.
 
 Next we show the difference in the expected log predictive density (elpd) estimated by leave-one-out (loo) cross-validation across models (see [here](https://mc-stan.org/loo/reference/loo.html)). The higher the value, the better the fit. Here "full" is used as the base level.
 
-![plot of chunk diff-elpd-loo](figure/diff-elpd-loo-1.png)
 
 ```
-## [1] "Range of the difference in elpd_loo between fixed_sigma and full models: (-1208.55845425573, -45.5684478145631)"
+## [1] "Range of the difference in EPLD_LOO between different models:"
 ```
+
+```
+##                                 Q0          Q5         Q25         Q50         Q75         Q95       Q100
+## no_lscov - full         -0.2954626    1.930878    3.140695    4.526943    5.541599    8.118259    8.74665
+## no_lscov_symm - full     3.1950237    6.328993    9.974277   13.406579   16.213133   18.726019   21.18368
+## fixed_sigma - full   -1091.5676938 -841.875589 -537.705544 -460.460139 -360.815230 -243.393282 -211.90811
+```
+
+```
+## Warning: Removed 30 row(s) containing missing values (geom_path).
+```
+
+```
+## Warning: Removed 30 rows containing missing values (geom_point).
+```
+
+```
+## Warning: Removed 32 row(s) containing missing values (geom_path).
+```
+
+```
+## Warning: Removed 32 rows containing missing values (geom_point).
+```
+
+![plot of chunk diff-elpd-loo](figure/diff-elpd-loo-1.png)
 
 We can see that "no_lscov_symm" is the best and "fixed_sigma" is much worse than others. Results using [waic](https://mc-stan.org/loo/reference/waic.html) instead of `loo` are almost identical.
 

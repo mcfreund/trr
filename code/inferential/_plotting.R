@@ -109,9 +109,10 @@ get_diff_dat <- function(x, name_term, base_level = NA, val_term = "Estimate",
   if (!is.null(id_term)) {
     res <- select(x, .env$name_term, .env$val_term, .env$id_term)
   } else res <- x
-  if (is.factor(res[[name_term]])) {
-    term_levels <- unique(sort(res[[name_term]]))
-  } else term_levels <- unique(res[[name_term]])
+  if (is.factor(x[[name_term]])) {  # Sort the column according to levels
+    res <- res %>% arrange(.env$name_term)
+  }
+  term_levels <- unique(res[[name_term]])
   if (is.na(base_level)) base_level <- term_levels[[1]]
 
   res <- pivot_wider(res, names_from = .env$name_term, values_from = .env$val_term)
@@ -125,6 +126,7 @@ get_diff_dat <- function(x, name_term, base_level = NA, val_term = "Estimate",
     new_names <- paste(term_levels[term_levels != base_level], "-", base_level)
     res <- pivot_longer(res, all_of(new_names),
       names_to = name_term, values_to = val_term)
+    if (is.factor(x[[name_term]])) res[[name_term]] <- factor(res[[name_term]], new_names)
   }
 
   res

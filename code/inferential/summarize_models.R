@@ -223,6 +223,6 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
 
 ########################### Main function ##############################
 
-res <- prep_mdl(model_names = c("fixed_sigma"),
-  response_names = c("uv", "rda", "ridge"), in_path = here("out", "inferential", "wo_divnorm"))
-saveRDS(res, file = here("out", "inferential", "wo_divnorm", "core32_stats.rds"))
+res <- prep_mdl(model_names = c("fixed_sigma", "no_lscov_symm", "no_lscov", "full"),
+  response_names = c("uv", "rda"), in_path = here("out", "inferential", atlas_nm))
+saveRDS(res, file = here("out", "inferential", atlas_nm, "core32_stats.rds"))
