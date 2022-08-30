@@ -73,24 +73,24 @@ First we plot the TRR estimated from univariate or multivariate methods for each
 
 ```
 ## # A tibble: 400 x 4
-##    region                        ridge     uv is_core32
+##    region                          rda     uv is_core32
 ##    <chr>                         <dbl>  <dbl> <lgl>    
-##  1 17Networks_LH_ContA_Cingm_1 -0.149  0.292  FALSE    
-##  2 17Networks_LH_ContA_IPS_1    0.532  0.592  FALSE    
-##  3 17Networks_LH_ContA_IPS_2    0.0179 0.482  FALSE    
-##  4 17Networks_LH_ContA_IPS_3    0.566  0.397  FALSE    
-##  5 17Networks_LH_ContA_IPS_4    0.697  0.621  FALSE    
-##  6 17Networks_LH_ContA_IPS_5    0.778  0.537  FALSE    
-##  7 17Networks_LH_ContA_PFCd_1   0.546  0.0817 TRUE     
-##  8 17Networks_LH_ContA_PFCl_1   0.541  0.563  TRUE     
-##  9 17Networks_LH_ContA_PFCl_2   0.597  0.582  TRUE     
-## 10 17Networks_LH_ContA_PFCl_3   0.316  0.534  TRUE     
+##  1 17Networks_LH_ContA_Cingm_1 -0.101  0.293  FALSE    
+##  2 17Networks_LH_ContA_IPS_1    0.531  0.592  FALSE    
+##  3 17Networks_LH_ContA_IPS_2   -0.0428 0.482  FALSE    
+##  4 17Networks_LH_ContA_IPS_3    0.537  0.397  FALSE    
+##  5 17Networks_LH_ContA_IPS_4    0.639  0.621  FALSE    
+##  6 17Networks_LH_ContA_IPS_5    0.712  0.537  FALSE    
+##  7 17Networks_LH_ContA_PFCd_1   0.534  0.0817 TRUE     
+##  8 17Networks_LH_ContA_PFCl_1   0.432  0.564  TRUE     
+##  9 17Networks_LH_ContA_PFCl_2   0.438  0.583  TRUE     
+## 10 17Networks_LH_ContA_PFCl_3   0.295  0.534  TRUE     
 ## # … with 390 more rows
 ```
 
 ![plot of chunk Pearson-scatter](figure/Pearson-scatter-1.png)
 
-And the distribution of the difference between the result of "ridge" and "uv":
+And the distribution of the difference between the result of "rda" and "uv":
 
 ![plot of chunk Pearson-diff](figure/Pearson-diff-1.png)
 
@@ -118,30 +118,29 @@ We made the same plots, but this time we only include core32 regions, and show t
 
 ```
 ## # A tibble: 32 x 3
-##    region                          uv  ridge
-##    <chr>                        <dbl>  <dbl>
-##  1 17Networks_LH_ContA_PFCd_1   0.433  0.599
-##  2 17Networks_LH_ContA_PFCl_1   0.591  0.676
-##  3 17Networks_LH_ContA_PFCl_2   0.711  0.486
-##  4 17Networks_LH_ContA_PFCl_3   0.428  0.254
-##  5 17Networks_LH_ContA_PFClv_2  0.594  0.582
-##  6 17Networks_LH_ContB_IPL_2    0.453  0.535
-##  7 17Networks_LH_ContB_PFClv_1  0.475  0.679
-##  8 17Networks_LH_ContB_PFClv_2 -0.197  0.130
-##  9 17Networks_LH_ContB_PFClv_3  0.175  0.647
-## 10 17Networks_LH_ContC_Cingp_2  0.113 -0.187
+##    region                           uv    rda
+##    <chr>                         <dbl>  <dbl>
+##  1 17Networks_LH_ContA_PFCd_1   0.135  0.786 
+##  2 17Networks_LH_ContA_PFCl_1   0.772  0.655 
+##  3 17Networks_LH_ContA_PFCl_2   0.727  0.539 
+##  4 17Networks_LH_ContA_PFCl_3   0.680  0.342 
+##  5 17Networks_LH_ContA_PFClv_2  0.461  0.610 
+##  6 17Networks_LH_ContB_IPL_2    0.339  0.646 
+##  7 17Networks_LH_ContB_PFClv_1  0.719  0.604 
+##  8 17Networks_LH_ContB_PFClv_2 -0.0692 0.205 
+##  9 17Networks_LH_ContB_PFClv_3  0.0971 0.567 
+## 10 17Networks_LH_ContC_Cingp_2  0.0554 0.0171
 ## # … with 22 more rows
 ```
 
 ![plot of chunk fixed-sigma-scatter](figure/fixed-sigma-scatter-1.png)
 
-Here we compare the results when we either normalize the data before calculating the response or not.
+Here we compare the results if we normalize the data within each vertex before fitting the spatial model.
 
 ![plot of chunk w-wo-divnorm-fs](figure/w-wo-divnorm-fs-1.png)
 
-We can see that divisive normalization seems to reduce TRR for "uv" but did not make big difference for "ridge". Therefore, divisive normalization (that we used here and after) might be biased towards multivariate methods without improving the overall result. Here we count the best response variable ("uv" or "ridge", with or without divnorm) over 32 regions:
+We can see that divisive normalization seems to reduce TRR for "uv" but did not make big difference for "rda". Therefore, divisive normalization might be biased towards multivariate methods without improving the overall result, and we didn't use it in all other analysis in this report.
 
-![plot of chunk fs-best](figure/fs-best-1.png)
 
 ## Model 2: "no_lscov_symm"
 
@@ -171,18 +170,18 @@ The same scatter plot:
 
 ```
 ## # A tibble: 32 x 3
-##    region                          uv   ridge
-##    <chr>                        <dbl>   <dbl>
-##  1 17Networks_LH_ContA_PFCd_1   0.507  0.634 
-##  2 17Networks_LH_ContA_PFCl_1   0.615  0.678 
-##  3 17Networks_LH_ContA_PFCl_2   0.715  0.487 
-##  4 17Networks_LH_ContA_PFCl_3   0.459  0.260 
-##  5 17Networks_LH_ContA_PFClv_2  0.570  0.557 
-##  6 17Networks_LH_ContB_IPL_2    0.510  0.574 
-##  7 17Networks_LH_ContB_PFClv_1  0.515  0.675 
-##  8 17Networks_LH_ContB_PFClv_2 -0.111  0.0278
-##  9 17Networks_LH_ContB_PFClv_3  0.144  0.590 
-## 10 17Networks_LH_ContC_Cingp_2  0.159 -0.0103
+##    region                          uv    rda
+##    <chr>                        <dbl>  <dbl>
+##  1 17Networks_LH_ContA_PFCd_1  0.312  0.766 
+##  2 17Networks_LH_ContA_PFCl_1  0.804  0.708 
+##  3 17Networks_LH_ContA_PFCl_2  0.721  0.565 
+##  4 17Networks_LH_ContA_PFCl_3  0.500  0.419 
+##  5 17Networks_LH_ContA_PFClv_2 0.353  0.385 
+##  6 17Networks_LH_ContB_IPL_2   0.462  0.661 
+##  7 17Networks_LH_ContB_PFClv_1 0.667  0.686 
+##  8 17Networks_LH_ContB_PFClv_2 0.0592 0.0994
+##  9 17Networks_LH_ContB_PFClv_3 0.0671 0.512 
+## 10 17Networks_LH_ContC_Cingp_2 0.114  0.0840
 ## # … with 22 more rows
 ```
 
