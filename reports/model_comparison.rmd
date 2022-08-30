@@ -294,9 +294,9 @@ Here we plot the TRR over core32 parcels and compare it with our previous result
 - Subjects: only 18 instead of 27
 - Preprocessing: no divisive normalization for each session
 - Response variables:
-  - "ridge" is the same as the current one, using `mda::fda()`("ridge")
+  - "ridge" uses `mda::fda()`, which is similar to `"rda"` but implemented using ridge regression
   - "rda_full" and "rda_diag" use `sparsediscrim::lda_schafer()` instead of `klaR` to generate the response variable, with either the full covariance matrix (including noise correlation) or only its diagonal (the signal).
-  - "uv" is not centered nor scaled
+  - "uv" is not demeaned for each run
 - The TRR model is similar to "fix_sigma" model except that:
   - The model is Gaussian instead of t-distributed
   - The fixed effects are treatment-coded
