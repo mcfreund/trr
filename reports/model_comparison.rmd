@@ -54,7 +54,7 @@ for (i in seq_along(responses)) {
 figs + plot_annotation(title = "Fitting statistics for Core32 ROIs", tag_levels = "A")
 ```
 
-Apparently there are two outliers with unexpectedly high Bayes_R2 but unexpectedly low elpd_loo (which is strange - need to check the data). For the sake of consistency, we decided to remove the two regions associated with the outliers from the data:
+The data now looks normal and there seems no outliers.
 
 ```{r, exclusion, echo = TRUE, eval = TRUE}
 outlier_dat <- dat %>% filter(Term == "elpd_loo", Estimate < -60000)

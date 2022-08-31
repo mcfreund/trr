@@ -19,7 +19,7 @@ First we check the outliers in the data by the fitting statistics:
 
 ![plot of chunk outliers](figure/outliers-1.png)
 
-Apparently there are two outliers with unexpectedly high Bayes_R2 but unexpectedly low elpd_loo (which is strange - need to check the data). For the sake of consistency, we decided to remove the two regions associated with the outliers from the data:
+The data now looks normal and there seems no outliers.
 
 
 ```r
@@ -28,11 +28,11 @@ outlier_dat
 ```
 
 ```
-## # A tibble: 2 x 16
-##   model         response session  Term     Estimate Est.Error CI.Lower CI.Upper Q.Lower Q.Upper   MAP  rhat ess_bulk ess_tail Grouping region                     
-##   <ord>         <ord>    <chr>    <chr>       <dbl>     <dbl>    <dbl>    <dbl>   <dbl>   <dbl> <dbl> <dbl>    <dbl>    <dbl> <chr>    <chr>                      
-## 1 no_lscov_symm rda      baseline elpd_loo  -65709.      702.       NA       NA      NA      NA    NA    NA       NA       NA <NA>     17Networks_LH_ContA_PFClv_2
-## 2 no_lscov_symm rda      baseline elpd_loo  -77219.      556.       NA       NA      NA      NA    NA    NA       NA       NA <NA>     17Networks_RH_ContA_PFCl_3
+## # A tibble: 0 x 16
+## # … with 16 variables: model <ord>, response <ord>, session <chr>, Term <chr>,
+## #   Estimate <dbl>, Est.Error <dbl>, CI.Lower <dbl>, CI.Upper <dbl>,
+## #   Q.Lower <dbl>, Q.Upper <dbl>, MAP <dbl>, rhat <dbl>, ess_bulk <dbl>,
+## #   ess_tail <dbl>, Grouping <chr>, region <chr>
 ```
 
 ```r
@@ -47,10 +47,10 @@ Then we compare the Bayesian R-squared of the models (see [here](https://paul-bu
 ## # A tibble: 4 x 2
 ##   model         mean_R2
 ##   <ord>           <dbl>
-## 1 fixed_sigma   0.00722
-## 2 no_lscov_symm 0.00636
-## 3 no_lscov      0.00544
-## 4 full          0.00524
+## 1 fixed_sigma   0.00740
+## 2 no_lscov_symm 0.00656
+## 3 no_lscov      0.00564
+## 4 full          0.00544
 ```
 
 ![plot of chunk Bayes-R2](figure/Bayes-R2-1.png)
@@ -65,18 +65,14 @@ Next we show the difference in the expected log predictive density (elpd) estima
 ```
 
 ```
-##                                 Q0          Q5         Q25         Q50         Q75         Q95       Q100
-## no_lscov - full         -0.2954626    1.930878    3.140695    4.526943    5.541599    8.118259    8.74665
-## no_lscov_symm - full     3.1950237    6.328993    9.974277   13.406579   16.213133   18.726019   21.18368
-## fixed_sigma - full   -1091.5676938 -841.875589 -537.705544 -460.460139 -360.815230 -243.393282 -211.90811
-```
-
-```
-## Warning: Removed 30 row(s) containing missing values (geom_path).
-```
-
-```
-## Warning: Removed 30 rows containing missing values (geom_point).
+##                                 Q0          Q5         Q25         Q50
+## no_lscov - full         -0.2954626    1.954661    3.092248    4.526943
+## no_lscov_symm - full     3.1950237    6.436310    9.794434   13.406579
+## fixed_sigma - full   -1091.5676938 -829.428617 -530.832441 -460.460139
+##                              Q75         Q95        Q100
+## no_lscov - full         6.099215    8.368128    9.151479
+## no_lscov_symm - full   16.338879   20.509315   21.183684
+## fixed_sigma - full   -361.512892 -244.133911 -211.908114
 ```
 
 ```
@@ -85,6 +81,14 @@ Next we show the difference in the expected log predictive density (elpd) estima
 
 ```
 ## Warning: Removed 32 rows containing missing values (geom_point).
+```
+
+```
+## Warning: Removed 36 row(s) containing missing values (geom_path).
+```
+
+```
+## Warning: Removed 36 rows containing missing values (geom_point).
 ```
 
 ![plot of chunk diff-elpd-loo](figure/diff-elpd-loo-1.png)
