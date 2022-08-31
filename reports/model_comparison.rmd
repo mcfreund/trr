@@ -105,7 +105,7 @@ colnames(tmp) <- paste0("Q", c(0, 5, 25, 50, 75, 95, 100))
 print("Range of the difference in EPLD_LOO between different models:")
 print(tmp)
 
-ylims <- c(-10, 20)
+ylims <- c(-10, 30)
 for (i in seq_along(responses)) {
   res <- responses[[i]]
   fig <- ggplot(diff_dat %>% filter(response == .env$res),
@@ -154,7 +154,7 @@ for (i in seq_along(models)) {
     aes(x = response, y = Estimate, fill = response)) +
     geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
     geom_jitter(size = 0.02, height = 0, width = 0.1) +
-    ylim(ylims[[1]], ylims[[2]]) + labs(x = res, y = NULL) +
+    ylim(ylims[[1]], ylims[[2]]) + labs(x = mdl, y = NULL) +
     theme(axis.text.x = element_blank())
   if (i == 1) figs <- fig + labs(y = "TRR") else figs <- figs + fig
 }

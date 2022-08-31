@@ -176,7 +176,7 @@ The same scatter plot:
 ##  2 17Networks_LH_ContA_PFCl_1  0.804  0.708 
 ##  3 17Networks_LH_ContA_PFCl_2  0.721  0.565 
 ##  4 17Networks_LH_ContA_PFCl_3  0.500  0.419 
-##  5 17Networks_LH_ContA_PFClv_2 0.353  0.385 
+##  5 17Networks_LH_ContA_PFClv_2 0.353  0.597 
 ##  6 17Networks_LH_ContB_IPL_2   0.462  0.661 
 ##  7 17Networks_LH_ContB_PFClv_1 0.667  0.686 
 ##  8 17Networks_LH_ContB_PFClv_2 0.0592 0.0994

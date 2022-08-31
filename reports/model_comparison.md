@@ -29,10 +29,8 @@ outlier_dat
 
 ```
 ## # A tibble: 0 x 16
-## # … with 16 variables: model <ord>, response <ord>, session <chr>, Term <chr>,
-## #   Estimate <dbl>, Est.Error <dbl>, CI.Lower <dbl>, CI.Upper <dbl>,
-## #   Q.Lower <dbl>, Q.Upper <dbl>, MAP <dbl>, rhat <dbl>, ess_bulk <dbl>,
-## #   ess_tail <dbl>, Grouping <chr>, region <chr>
+## # … with 16 variables: model <ord>, response <ord>, session <chr>, Term <chr>, Estimate <dbl>, Est.Error <dbl>, CI.Lower <dbl>, CI.Upper <dbl>, Q.Lower <dbl>, Q.Upper <dbl>, MAP <dbl>, rhat <dbl>,
+## #   ess_bulk <dbl>, ess_tail <dbl>, Grouping <chr>, region <chr>
 ```
 
 ```r
@@ -65,14 +63,10 @@ Next we show the difference in the expected log predictive density (elpd) estima
 ```
 
 ```
-##                                 Q0          Q5         Q25         Q50
-## no_lscov - full         -0.2954626    1.954661    3.092248    4.526943
-## no_lscov_symm - full     3.1950237    6.436310    9.794434   13.406579
-## fixed_sigma - full   -1091.5676938 -829.428617 -530.832441 -460.460139
-##                              Q75         Q95        Q100
-## no_lscov - full         6.099215    8.368128    9.151479
-## no_lscov_symm - full   16.338879   20.509315   21.183684
-## fixed_sigma - full   -361.512892 -244.133911 -211.908114
+##                                 Q0          Q5         Q25         Q50         Q75         Q95        Q100
+## no_lscov - full         -0.2954626    1.954661    3.092248    4.526943    6.099215    8.368128    9.151479
+## no_lscov_symm - full     3.1950237    6.436310    9.794434   13.406579   16.338879   20.509315   21.183684
+## fixed_sigma - full   -1091.5676938 -829.428617 -530.832441 -460.460139 -361.512892 -244.133911 -211.908114
 ```
 
 ```
@@ -84,11 +78,11 @@ Next we show the difference in the expected log predictive density (elpd) estima
 ```
 
 ```
-## Warning: Removed 36 row(s) containing missing values (geom_path).
+## Warning: Removed 32 row(s) containing missing values (geom_path).
 ```
 
 ```
-## Warning: Removed 36 rows containing missing values (geom_point).
+## Warning: Removed 32 rows containing missing values (geom_point).
 ```
 
 ![plot of chunk diff-elpd-loo](figure/diff-elpd-loo-1.png)
