@@ -30,11 +30,10 @@ source(here("code", "_constants.R"))
 val_terms <- c(ridge = "value.ridge", rda = "value.rda", uv = "uv")
 auc_term <- "auc_ridge"
 do_session <- "baseline"
-old_subjs_only <- TRUE  # Whether to use previous 18 subjects only
 fnames <- c(
   w_divnorm = paste0("projections__stroop__rda__n_resamples100",
-    "__divnorm_run__divnorm_vertex__cv_allsess.csv"),
-  wo_divnorm = "projections__stroop__rda__n_resamples100__cv_allsess.csv"
+    "__demean_run__divnorm_vertex__cv_allsess.csv"),
+  wo_divnorm = "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"
 )
 models <- names(fnames)
 responses <- names(val_terms)
@@ -47,10 +46,8 @@ dat <- bind_rows(dat, .id = "model") %>%
   na.omit()
 
 # Subjects
-if (old_subjs_only) {
-  other_dat <- dat %>% filter(!subj %in% .env$subjs_old_complete)
-  dat <- dat %>% filter(subj %in% .env$subjs_old_complete)
-}
+other_dat <- dat %>% filter(!subj %in% .env$subjs_old_complete)
+dat <- dat %>% filter(subj %in% .env$subjs_old_complete)
 n_subj <- length(unique(dat$subj))
 
 # # AUC
@@ -112,6 +109,8 @@ trr_all_subjs <- bind_rows(lapply(val_terms, function(x) {
 # TRR for each response type, more or fewer subjects, with or without normalization
 trr_full <- bind_rows(list(subset18 = trr_summary, full = trr_all_subjs),
   .id = "subjects")
+fwrite(trr_full, here("out", "inferential", "pearson_correlations.csv"))
+
 clim <- max(range(trr_full$trr))
 figs <- NULL
 for (res in responses) {
