@@ -54,7 +54,7 @@ if (exists('params')) {
   response <- params$response
   session <- params$session
 } else {
-  response <- "ridge"  ## for dev
+  response <- "rda"  ## for dev
   session <- "baseline"
 }
 
@@ -94,7 +94,8 @@ future_pmap_bind <- function(.x, .f, ...) add_names_and_bind(future_pmap(.x, .f,
 
 ## read data for summarystat model, subset relevant rows/cols, get subject-level stats:
 
-d_summarystat <- fread(file.path(path_out, "spatial", "projections__stroop__rda__n_resamples100__cv_allsess.csv"))
+d_summarystat <-
+  fread(file.path(path_out, "spatial", "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"))
 d_summarystat <- d_summarystat %>% rename(ridge = value.ridge, rda = value.rda)
 cols_keep <- c("roi", response, "variable", "trial", "subj", "wave")
 d_summarystat <- d_summarystat[test_session == session & roi %in% rois[core32], ..cols_keep] %>% na.omit()
@@ -377,7 +378,7 @@ s_hbm_posterior %>%
   geom_vline(data = r_summarystat[, c("roi_nm", "r")], aes(xintercept = r), linetype = "dashed") +
   facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
   scale_color_manual(values = colors_model[models_hbm]) +
-  theme(legend.position = c(0.5, 0.05)) +
+  theme(legend.position = c(0.75, 0.05)) +
   labs(title = "posterior densities for TRR", caption = "dashed line = summary-stat TRR")
 
 ```
@@ -413,12 +414,120 @@ s_hbm_posterior[, .(trr = sd(trr)), by = c("model_nm", "roi_nm")] %>%
   geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
   geom_line(aes(group = roi_nm), alpha = 0.5) +
   scale_color_viridis_d() +
-  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_y_continuous(limits = c(0, 1)) +
   theme(legend.position = "none") +
   labs(title = "sd(TRR)", caption = "each line is an ROI")
 
 ```
 
+
+## trial/subject level variance ratio (hi-lo contrast)
+
+```{r}
+
+
+## get HBM posteriors:
+
+s_hbm_subj_ratio <- future_pmap_bind(
+  model_info,
+  read_summarize_hbm,
+  response = response,
+  session = session,
+  base_path = file.path(path_out, "inferential"),
+  atlas_nm = atlas_nm,
+  sum_fun = function(x) {
+    ranefs <- ranef(x, summary = FALSE)$subj
+    if ("sd_subj__hilo_wave1" %in% variables(x)) {
+      stroop1 <- ranefs[, , "hilo_wave1"]
+      stroop2 <- ranefs[, , "hilo_wave2"]
+      if ("b_sigma_Intercept" %in% variables(x))  {
+        hyp <- "exp(sigma_Intercept) = 0"
+      } else {
+        hyp <- "(exp(sigma_hilo_wave1) + exp(sigma_hilo_wave2) + exp(sigma_mean_wave1) + exp(sigma_mean_wave2)) / 4 = 0"
+      }
+    } else {
+      stroop1 <- ranefs[, , "hi_wave1"] - ranefs[, , "lo_wave1"]
+      stroop2 <- ranefs[, , "hi_wave2"] - ranefs[, , "lo_wave2"]
+      hyp <- "(exp(sigma_hi_wave1) + exp(sigma_hi_wave2) + exp(sigma_lo_wave1) + exp(sigma_lo_wave2)) / 4 = 0"
+    }
+    sigma_stroop1 <- sqrt(Var(stroop1, 1))
+    sigma_stroop2 <- sqrt(Var(stroop2, 1))
+    sigma_stroop <- (sigma_stroop1 + sigma_stroop2)/2
+    sigma_resid <- hypothesis(x, hyp)$samples$H1
+    ratio <- sigma_resid / sigma_stroop
+
+    data.table(
+      sigma_resid = sigma_resid, 
+      sigma_stroop = sigma_stroop, 
+      ratio = sigma_resid / sigma_stroop,
+      resample = seq_along(ratio)
+      )
+
+  }
+)
+
+
+```
+
+### posterior distributions
+
+
+```{r}
+
+## plot:
+
+s_hbm_subj_ratio %>%
+  ggplot(aes(log(ratio), color = model_nm)) +
+  geom_density(size = 1) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  scale_color_manual(values = colors_model[models_hbm]) +
+  theme(legend.position = c(0.75, 0.05)) +
+  labs(title = "posterior densities for log sd(trial)/sd(subj_stroop)")
+
+```
+
+### statistics on posterior distributions
+
+
+```{r}
+
+s_hbm_subj_ratio[, .(ratio = max_aposteriori(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "MAP(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+s_hbm_subj_ratio[, .(ratio = mean(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "mean(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+s_hbm_subj_ratio[, .(ratio = median(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "median(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+s_hbm_subj_ratio[, .(ratio = sd(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "sd(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+```
 
 # model comparison
 
@@ -455,8 +564,6 @@ diff_dat %>%
 
 # model diagnostics
 
-
-
 ```{r}
 
 diagnostics <-
@@ -476,7 +583,11 @@ diagnostics <-
       rbind(fixed, random)
     }
 )
+```
 
+## Rhats
+
+```{r}
 diagnostics %>%
   filter(class == "fixed") %>%
   ggplot(aes(model_nm, Rhat)) +
@@ -489,7 +600,8 @@ diagnostics %>%
   geom_text(aes(label = ifelse(Rhat > 1.01, as.character(term), "")), size = 1.5, hjust = 0) +
   facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
   scale_color_identity() +
-  theme(axis.text.x = element_text(angle = axis_text_x_angle))
+  theme(axis.text.x = element_text(angle = axis_text_x_angle)) +
+  labs(title = "fixed effects")
 
 diagnostics %>%
   filter(class == "random") %>%
@@ -503,7 +615,8 @@ diagnostics %>%
   geom_text(aes(label = ifelse(Rhat > 1.01, as.character(term), "")), size = 1.5, hjust = 0) +
   facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
   scale_color_identity() +
-  theme(axis.text.x = element_text(angle = axis_text_x_angle))
+  theme(axis.text.x = element_text(angle = axis_text_x_angle)) +
+  labs(title = "random effects")
 
 ```
 
@@ -586,3 +699,5 @@ diagnostics %>%
   #   aes(y = NULL, ymin = CI.Lower, ymax = CI.Upper), width = 0.1, color = "black") +
 
 ```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

@@ -4,7 +4,7 @@ library(here)
 library(rmarkdown)
 library(mfutils)
 
-responses <- c("uv", "ridge", "rda")
+responses <- c("uv", "rda")
 pars <- data.frame(response = responses, stringsAsFactors = FALSE)
 
 for (i in seq_len(nrow(pars))) {
