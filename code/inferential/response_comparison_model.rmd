@@ -327,7 +327,7 @@ for (roi in rois[core32]) {
     facet_grid(cols = vars(response)) +
     scale_fill_discrete_qualitative() +
     scale_color_discrete_qualitative() +
-    scale_shape_manual(values = c(no_lscov_symm = 21, summarystat = 4)) +
+    scale_shape_manual(values = setNames(c(21, 4), c(model, "summarystat"))) +
     labs(title = roi)
 
   print(p)
@@ -536,6 +536,186 @@ s_hbm_subj_ratio[, .(ratio = sd(ratio)), by = c("model_nm", "roi_nm", "response"
   scale_x_continuous(limits = c(0.1, 100), trans = "log", labels = function(x) sprintf("%.2f", x)) +
   theme(legend.position = "none") +
   labs(title = "sd(ratio)")
+
+```
+
+## TRR bias: E(HLM) - summarystat
+
+### univariate versus multivariate
+
+```{r}
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  pivot_wider(names_from = model_nm, values_from = trr) %>%
+  #mutate(trr_bias = !!as.symbol(model) - summarystat) %>%
+  #pivot_wider(id_cols = c("roi_nm"), names_from = response, values_from = trr_bias) %>%
+  ggplot(aes_string("summarystat", model, color = "roi_nm", fill = "roi_nm")) +
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  facet_grid(cols = vars(response)) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias: MAP(HLM TRR) vs summarystat TRR")
+
+
+s_hbm_posterior[, .(trr = mean(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  pivot_wider(names_from = model_nm, values_from = trr) %>%
+  #mutate(trr_bias = !!as.symbol(model) - summarystat) %>%
+  #pivot_wider(id_cols = c("roi_nm"), names_from = response, values_from = trr_bias) %>%
+  ggplot(aes_string("summarystat", model, color = "roi_nm", fill = "roi_nm")) +
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  facet_grid(cols = vars(response)) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias: mean(HLM TRR) vs summarystat TRR")
+
+s_hbm_posterior[, .(trr = median(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  pivot_wider(names_from = model_nm, values_from = trr) %>%
+  #mutate(trr_bias = !!as.symbol(model) - summarystat) %>%
+  #pivot_wider(id_cols = c("roi_nm"), names_from = response, values_from = trr_bias) %>%
+  ggplot(aes_string("summarystat", model, color = "roi_nm", fill = "roi_nm")) +
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  facet_grid(cols = vars(response)) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias: median(HLM TRR) vs summarystat TRR")
+
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  pivot_wider(names_from = model_nm, values_from = trr) %>%
+  mutate(trr_bias = !!as.symbol(model) - summarystat) %>%
+  pivot_wider(id_cols = c("roi_nm"), names_from = response, values_from = trr_bias) %>%
+  ggplot(aes_string("uv", mv, color = "roi_nm", fill = "roi_nm")) +
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias: MAP(HLM TRR) - summarystat TRR")
+
+s_hbm_posterior[, .(trr = mean(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  pivot_wider(names_from = model_nm, values_from = trr) %>%
+  mutate(trr_bias = !!as.symbol(model) - summarystat) %>%
+  pivot_wider(id_cols = c("roi_nm"), names_from = response, values_from = trr_bias) %>%
+  ggplot(aes_string("uv", mv, color = "roi_nm", fill = "roi_nm")) +
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias: mean(HLM TRR) - summarystat TRR")
+
+s_hbm_posterior[, .(trr = median(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  pivot_wider(names_from = model_nm, values_from = trr) %>%
+  mutate(trr_bias = !!as.symbol(model) - summarystat) %>%
+  pivot_wider(id_cols = c("roi_nm"), names_from = response, values_from = trr_bias) %>%
+  ggplot(aes_string("uv", mv, color = "roi_nm", fill = "roi_nm")) +
+  geom_abline() +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias: median(HLM TRR) - summarystat TRR")
+
+```
+
+### vs SD(TRR)
+
+```{r}
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr), trr_sd = sd(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(summarystat = r) %>% ungroup %>% select(-model_nm)) %>%
+  mutate(trr_bias = trr - summarystat) %>%
+  ggplot(aes(trr_sd, summarystat, color = roi_nm, fill = roi_nm)) +
+  geom_point(shape = 21, size = point_size) +
+  geom_hline(yintercept = 0) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  theme(legend.position = "none") +
+  facet_grid(cols = vars(response)) +
+  labs(title = "summarystat TRR ~ SD(HBM TRR)")
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr), trr_sd = sd(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(summarystat = r) %>% ungroup %>% select(-model_nm)) %>%
+  mutate(trr_bias = trr - summarystat) %>%
+  ggplot(aes(trr_sd, trr_bias, color = roi_nm, fill = roi_nm)) +
+  geom_point(shape = 21, size = point_size) +
+  geom_hline(yintercept = 0) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  theme(legend.position = "none") +
+  facet_grid(cols = vars(response)) +
+  labs(title = "TRR bias ~ SD(HBM TRR)")
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr), trr_sd = sd(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(summarystat = r) %>% ungroup %>% select(-model_nm)) %>%
+  mutate(trr_bias = trr - summarystat) %>%
+  ggplot(aes(trr_sd, trr_bias, color = roi_nm, fill = roi_nm)) +
+  geom_point(shape = 21, size = point_size) +
+  geom_hline(yintercept = 0) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  theme(legend.position = "none") +
+  facet_grid(cols = vars(response)) +
+  labs(title = "TRR bias ~ SD(HBM TRR)")
+
+```
+
+## vs variability ratio
+
+```{r}
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr), trr_sd = sd(trr)), by = c("model_nm", "roi_nm", "response")] %>%
+  full_join(r_summarystat %>% rename(summarystat = r) %>% ungroup %>% select(-model_nm)) %>%
+  mutate(trr_bias = trr - summarystat) %>%
+  full_join(s_hbm_subj_ratio[, .(ratio = max_aposteriori(ratio)), by = c("model_nm", "roi_nm", "response")]) %>%
+  #pivot_wider(names_from = response, values_from = ratio) %>%
+  ggplot(aes(trr_bias, ratio, color = roi_nm, fill = roi_nm)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  geom_point(shape = 21, size = point_size) +
+  scale_color_viridis_d() +
+  scale_fill_viridis_d() +
+  #scale_y_continuous(limits = c(4, 100), trans = "log", labels = function(x) sprintf("%.2f", x)) +
+  #scale_x_continuous(limits = c(4, 100), trans = "log", labels = function(x) sprintf("%.2f", x)) +
+  facet_grid(cols = vars(response)) +
+  theme(legend.position = "none") +
+  labs(title = "TRR bias ~ MAP(ratio)")
 
 ```
 
