@@ -53,3 +53,10 @@ scratch/
 ## images
 figs/
 reports/*html
+
+## Slurm files
+*.out
+*.err
+
+## ROI input
+in/*.RDS
