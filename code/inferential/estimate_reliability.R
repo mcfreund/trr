@@ -81,7 +81,7 @@ roi_idx <- roi_idx_first:roi_idx_last
 ########################## Constants ##############################
 
 n_core_brm <- 4  # Number of cores for parallelization within brm()
-file_refit <- "always"  ## "on_change", "never", "always", see help(brm)
+file_refit <- "on_change"  ## "on_change", "never", "always", see help(brm)
 tasks <- "Stroop"
 sessions <- c("baseline")
 vterm <- switch(response_names[[1]],
@@ -240,7 +240,9 @@ fit_model <- function(x) {
 
 fits_bayes <- mclapply(
   names(formulas),
-  fit_model,
+  function(x) {
+    tryCatch(expr = fit_model(x), error = function(e) NA)
+  },
   mc.cores = min(length(formulas), n_cores %/% n_core_brm)
 )
 
