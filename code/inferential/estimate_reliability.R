@@ -164,6 +164,8 @@ input_for_bayes <- d_wide %>%
   setNames(gsub("17Networks", "Networks", names(.)))
 rois_bayes <- gsub("17Networks", "Networks", rois)
 
+# Save some memory
+rm(d, d_wide)
 
 
 ################## Fit Bayesian hierarchical models ###############
@@ -215,8 +217,6 @@ if (FALSE) {
 }
 
 print(paste0(" --------------- starting ", model_name, " ", response_name, " ", session, " --------------- "))
-time_start <- Sys.time()
-print(time_start)
 
 fit_model <- function(x) {
   out_subdir <- file.path(out_path, x)
@@ -244,7 +244,6 @@ fits_bayes <- mclapply(
   mc.cores = min(length(formulas), n_cores %/% n_core_brm)
 )
 
-print(Sys.time() - time_start)
 print(paste0(length(rois[is.na(fits_bayes)]), " needs rerun"))
 needs_refit[[paste0(model_name, "__", response_name, "__", session)]] <- rois[is.na(fits_bayes)]
 
