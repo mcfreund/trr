@@ -52,14 +52,14 @@ source(here("code", "_funs.R"))
 ################### Command line parameters ######################
 
 args <- commandArgs(trailingOnly = TRUE)
-stopifnot(length(args) <= 3)
+stopifnot(length(args) <= 4)
 
 # Help
 if (length(args) == 0) {
   print(paste(
     "Usage: Rscript estimate_reliability.R",
     "[response_name = rda / uv] [n_cores (default = 4)]",
-    "[roi_scope = debug / core32 / full (default = test))]"
+    "[roi_idx_first (default = 1)] [roi_idx_last (default = 2)]"
   ))
   q()
 }
@@ -72,15 +72,10 @@ stopifnot(response_names[[1]] %in% c("rda", "uv"))
 if (length(args) >= 2) n_cores <- strtoi(args[[2]]) else n_cores <- 4
 
 # Subset of ROIs to use
-if (length(args) == 3) {
-  roi_idx <- switch(args[[3]],
-    "debug" = 1:2,
-    "core32" = core32,
-    "full" = 1:400
-  )
-} else {
-  roi_idx <- 1:2
-}
+if (length(args) >= 3) roi_idx_first <- strtoi(args[[3]]) else roi_idx_first <- 1
+if (length(args) >= 4) roi_idx_last <- strtoi(args[[4]]) else roi_idx_last <- 2
+stopifnot(roi_idx_first <= roi_idx_last)
+roi_idx <- roi_idx_first:roi_idx_last
 
 
 ########################## Constants ##############################
