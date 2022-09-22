@@ -223,6 +223,6 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
 
 ########################### Main function ##############################
 
-res <- prep_mdl(model_names = c("fixed_sigma", "no_lscov_symm", "no_lscov", "full"),
+res <- prep_mdl(model_names = c("no_lscov_symm"),
   response_names = c("uv", "rda"), in_path = here("out", "inferential", atlas_nm))
-saveRDS(res, file = here("out", "inferential", atlas_nm, "core32_stats.rds"))
+saveRDS(res, file = here("out", "inferential", atlas_nm, "Schaefer400_stats.rds"))

@@ -1,0 +1,78 @@
+---
+title: "Test-retest reliability model results for all parcels"
+output: 
+    html_document:
+        toc: false
+        toc_depth: 2
+        toc_float: false
+        number_sections: false
+        df_print: paged
+---
+
+```{r, setup, include = FALSE}
+library(here)
+library(tidyverse)
+library(patchwork)
+
+source(here("code", "_constants.R"))
+source(here("code", "inferential", "_plotting.R"))
+core32_roi <- rois[core32]
+
+debugging <- T
+input_name <- "Schaefer400_stats.rds"
+test_session <- "baseline"
+responses <- c("uv", "rda")  # The first one is used as the base level
+
+dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
+dat <- bind_rows(dat, .id = "model__response__session") %>%
+  separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
+  filter(session %in% .env$test_session) %>%
+  mutate(response = factor(response, .env$responses, ordered = T),
+    is_core32 = region %in% .env$core32_roi,
+    network = map_chr(region, ~ strsplit(., "_")[[1]][[3]])) %>%
+  select(-c(model, session)) %>%
+  arrange(response, region)
+
+# Note: The TRRs were calculated in `code/spatial/cmp_proj.R` from the spatial models
+cor_res <- read_csv(here("out", "inferential", "pearson_correlations.csv")) %>%
+  filter(subjects == "full", model == "wo_divnorm", response %in% .env$responses) %>%
+  mutate(response = factor(response, .env$responses, ordered = T),
+    is_core32 = region %in% .env$core32_roi,
+    network = map_chr(region, ~ strsplit(., "_")[[1]][[3]])) %>%
+  select(region, response, trr, is_core32, network)
+
+bayes_res <- dat %>%
+  filter(Term == "TRR") %>%
+  rename(trr = Estimate) %>%
+  select(region, response, trr, is_core32, network)
+
+models <- c("Pearson", "Bayesian")
+trr_res <- bind_rows(list(Pearson = cor_res, Bayesian = bayes_res), .id = "model") %>%
+  mutate(model = factor(model, models, ordered = T))
+```
+
+Here we plot the TRRs estimated by Pearson correlation and hierarchical Bayesian model (no_lscov_symm).
+
+```{r, scatter-uvmv, echo = FALSE, message = FALSE}
+lim <- range(trr_res$trr)
+tmp <- trr_res %>%
+  pivot_wider(values_from = trr, names_from = response)
+for (mdl in models) {
+  fig <- ggplot(tmp %>% filter(model == .env$mdl)) +
+    aes(x = uv, y = rda, color = network) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1) +
+    geom_rug() +
+    labs(x = "uv", y = "rda", title = mdl) +
+    xlim(lim[[1]], lim[[2]]) +
+    ylim(lim[[1]], lim[[2]])
+  if (mdl == "Pearson") figs <- fig else figs <- figs + fig
+}
+figs <- figs + plot_annotation(title = paste("TRR over all regions estimated by different methods"))
+if (debugging) ggsave("tmp.png", plot = figs) else figs
+```
+
+Then we investigate the improvements by replacing Pearson correaltion with Bayesian model:
+
+```{r, scatter-bias, echo = F, message = F}
+```
