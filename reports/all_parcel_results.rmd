@@ -10,6 +10,9 @@ output:
 ---
 
 ```{r, setup, include = FALSE}
+
+knitr::opts_chunk$set(dpi = 300)
+
 library(here)
 library(tidyverse)
 library(patchwork)
@@ -18,48 +21,52 @@ source(here("code", "_constants.R"))
 source(here("code", "inferential", "_plotting.R"))
 core32_roi <- rois[core32]
 
-debugging <- T
+debugging <- FALSE
 input_name <- "Schaefer400_stats.rds"
 test_session <- "baseline"
 responses <- c("uv", "rda")  # The first one is used as the base level
+cont_networks <- c("ContA", "ContB", "DorsAttnA", "DorsAttnB")
 
 dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
 dat <- bind_rows(dat, .id = "model__response__session") %>%
   separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
   filter(session %in% .env$test_session) %>%
-  mutate(response = factor(response, .env$responses, ordered = T),
-    is_core32 = region %in% .env$core32_roi,
-    network = map_chr(region, ~ strsplit(., "_")[[1]][[3]])) %>%
   select(-c(model, session)) %>%
-  arrange(response, region)
+  arrange(region, response)
 
 # Note: The TRRs were calculated in `code/spatial/cmp_proj.R` from the spatial models
 cor_res <- read_csv(here("out", "inferential", "pearson_correlations.csv")) %>%
   filter(subjects == "full", model == "wo_divnorm", response %in% .env$responses) %>%
-  mutate(response = factor(response, .env$responses, ordered = T),
-    is_core32 = region %in% .env$core32_roi,
-    network = map_chr(region, ~ strsplit(., "_")[[1]][[3]])) %>%
-  select(region, response, trr, is_core32, network)
+  select(region, response, trr)
 
 bayes_res <- dat %>%
   filter(Term == "TRR") %>%
   rename(trr = Estimate) %>%
-  select(region, response, trr, is_core32, network)
+  select(region, response, trr)
 
 models <- c("Pearson", "Bayesian")
 trr_res <- bind_rows(list(Pearson = cor_res, Bayesian = bayes_res), .id = "model") %>%
-  mutate(model = factor(model, models, ordered = T))
+  mutate(
+    response = factor(response, responses, ordered = T),
+    model = factor(model, models, ordered = T),
+    network = map_chr(region, ~ strsplit(., "_")[[1]][[3]]),
+    network_roi = if_else(network %in% cont_networks, network, "others"),
+    network_roi = na_if(network_roi, "others")
+  ) %>%
+  arrange(network_roi, region, model, response)
 ```
 
 Here we plot the TRRs estimated by Pearson correlation and hierarchical Bayesian model (no_lscov_symm).
 
-```{r, scatter-uvmv, echo = FALSE, message = FALSE}
+```{r, scatters-uvmv, echo = FALSE, message = FALSE, fig.dim = c(8, 4)}
 lim <- range(trr_res$trr)
 tmp <- trr_res %>%
   pivot_wider(values_from = trr, names_from = response)
 for (mdl in models) {
   fig <- ggplot(tmp %>% filter(model == .env$mdl)) +
-    aes(x = uv, y = rda, color = network) +
+    aes(x = uv, y = rda, color = network_roi) +
+    # scale_color_viridis_d(na.value = "#bebebe77") +
+    scale_color_brewer(palette = "Set1", na.value = "#bebebe77") +
     geom_point() +
     geom_abline(intercept = 0, slope = 1) +
     geom_rug() +
@@ -68,11 +75,108 @@ for (mdl in models) {
     ylim(lim[[1]], lim[[2]])
   if (mdl == "Pearson") figs <- fig else figs <- figs + fig
 }
-figs <- figs + plot_annotation(title = paste("TRR over all regions estimated by different methods"))
-if (debugging) ggsave("tmp.png", plot = figs) else figs
+figs <- figs + plot_layout(guides = "collect") +
+  plot_annotation(title = paste("TRR over all regions estimated by different methods"))
+if (debugging) ggsave("tmp.png", plot = figs, width = 8, height = 4) else print(figs)
 ```
 
 Then we investigate the improvements by replacing Pearson correaltion with Bayesian model:
 
-```{r, scatter-bias, echo = F, message = F}
+```{r, scatter-bias, echo = F, message = F, fig.dim = c(6, 6), out.width = "50%", fig.align="center"}
+tmp <- get_diff_dat(trr_res, "model", val_term = "trr") %>%
+  pivot_wider(values_from = trr, names_from = response)
+lim2 <- range(tmp[c("uv", "rda")])
+fig <- ggplot(tmp) +
+  aes(x = uv, y = rda, color = network_roi) +
+  scale_color_brewer(palette = "Set1", na.value = "#bebebe77") +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_rug() +
+  labs(x = "uv_HBM - uv_Pearson", y = "rda_HBM - rda_Pearson",
+    title = "Difference between the TRRs estimated by different models") +
+  xlim(lim2[[1]], lim2[[2]]) +
+  ylim(lim2[[1]], lim2[[2]])
+if (debugging) ggsave("tmp.png", plot = fig) else print(fig)
+```
+
+We seperate this plot for each network to investiagte which network benefits most from hierarchical Bayesian modeling:
+
+```{r, scatters-bias, echo = F, message = F, fig.dim = c(16, 9)}
+tmp <- get_diff_dat(trr_res, "model", val_term = "trr") %>%
+  pivot_wider(values_from = trr, names_from = response)
+lim2 <- range(tmp[c("uv", "rda")])
+networks <- unique(tmp$network)
+for (i in seq_along(networks)) {
+  palet <- c("red")
+  names(palet) <- networks[[i]]
+  fig <- ggplot(tmp) +
+    aes(x = uv, y = rda, color = network) +
+    scale_color_manual(values = palet, na.value = "#bebebe26") +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    geom_hline(yintercept = 0, linetype = "dotted") +
+    labs(x = "uv", y = "rda",
+      title = networks[[i]]) +
+    xlim(lim2[[1]], lim2[[2]]) +
+    ylim(lim2[[1]], lim2[[2]]) +
+    theme(legend.position = "none")
+  if (i == 1) figs <- fig else figs <- figs + fig
+}
+figs <- figs +
+  plot_annotation(title = "TRR(HBM) - TRR(Pearson) for different response variables")
+if (debugging) ggsave("tmp.png", plot = figs, width = 16, height = 9) else print(figs)
+```
+
+Then we plot the difference between multivariate and univariate methods for each TRR model (Pearson correlation or HBM):
+
+```{r, scatter-uvmv-diff, echo = F, message = F, fig.dim = c(6, 6), out.width = "50%", fig.align="center"}
+tmp <- get_diff_dat(trr_res, "response", val_term = "trr") %>%
+  pivot_wider(values_from = trr, names_from = model)
+lim2 <- range(tmp[c("Pearson", "Bayesian")])
+fig <- ggplot(tmp) +
+  aes(x = Pearson, y = Bayesian, color = network_roi) +
+  # scale_color_viridis_d(na.value = "#bebebe77") +
+  scale_color_brewer(palette = "Set1", na.value = "#bebebe77") +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_rug() +
+  labs(x = "rda_Pearson - uv_Pearson", y = "rda_HBM - uv_HBM",
+    title = "Difference between the TRRs estimated by different response variables") +
+  xlim(lim2[[1]], lim2[[2]]) +
+  ylim(lim2[[1]], lim2[[2]])
+if (debugging) ggsave("tmp.png", plot = fig) else print(fig)
+```
+
+We seperate this plot for each network to investiagte which network benefits most from multivariate methods:
+
+```{r, scatters-uvmv-diff, echo = F, message = F, fig.dim = c(16, 9)}
+tmp <- get_diff_dat(trr_res, "response", val_term = "trr") %>%
+  pivot_wider(values_from = trr, names_from = model)
+lim2 <- range(tmp[c("Pearson", "Bayesian")])
+networks <- unique(tmp$network)
+for (i in seq_along(networks)) {
+  palet <- c("red")
+  names(palet) <- networks[[i]]
+  fig <- ggplot(tmp) +
+    aes(x = Pearson, y = Bayesian, color = network) +
+    scale_color_manual(values = palet, na.value = "#bebebe26") +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    geom_hline(yintercept = 0, linetype = "dotted") +
+    labs(x = "Pearson", y = "Bayesian",
+      title = networks[[i]]) +
+    xlim(lim2[[1]], lim2[[2]]) +
+    ylim(lim2[[1]], lim2[[2]]) +
+    theme(legend.position = "none")
+  if (i == 1) figs <- fig else figs <- figs + fig
+}
+figs <- figs +
+  plot_annotation(title = "TRR(rda) - TRR(uv) estimated by different methods")
+if (debugging) ggsave("tmp.png", plot = figs, width = 16, height = 9) else print(figs)
 ```
