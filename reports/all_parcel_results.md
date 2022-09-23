@@ -27,6 +27,10 @@ We seperate this plot for each network to investiagte which network benefits mos
 
 ![plot of chunk scatters-bias](figure/scatters-bias-1.png)
 
+We then take a look at whether the improvement by HBM correlates with Pearson(TRR).
+
+![plot of chunk scatter-trr-bias](figure/scatter-trr-bias-1.png)
+
 Then we plot the difference between multivariate and univariate methods for each TRR model (Pearson correlation or HBM):
 
 <img src="figure/scatter-uvmv-diff-1.png" title="plot of chunk scatter-uvmv-diff" alt="plot of chunk scatter-uvmv-diff" width="50%" style="display: block; margin: auto;" />

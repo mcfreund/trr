@@ -155,6 +155,30 @@ figs <- figs +
 if (debugging) ggsave("tmp.png", plot = figs, width = 16, height = 9) else print(figs)
 ```
 
+We then take a look at whether the improvement by HBM correlates with Pearson(TRR).
+
+```{r, scatter-trr-bias, echo = F, message = F, fig.dim = c(8, 4)}
+tmp <- trr_res %>%
+  pivot_wider(values_from = trr, names_from = model) %>%
+  mutate(Diff = Bayesian - Pearson)
+lim1 <- range(trr_res$trr)
+lim2 <- range(tmp$Diff)
+for (res in responses) {
+  fig <- ggplot(tmp %>% filter(response == .env$res)) +
+    aes(x = Pearson, y = Diff, color = network_roi) +
+    scale_color_brewer(palette = "Set1", na.value = "#bebebe77") +
+    geom_point() +
+    # geom_smooth(method = "lm") +
+    labs(x = "Pearson", y = "Difference", title = res) +
+    xlim(lim1[[1]], lim1[[2]]) +
+    ylim(lim2[[1]], lim2[[2]])
+  if (res == "uv") figs <- fig else figs <- figs + fig
+}
+figs <- figs + plot_layout(guides = "collect") +
+  plot_annotation(title = "Pearson(TRR) over HBM(TRR) - Pearson(TRR) for each response")
+if (debugging) ggsave("tmp.png", plot = figs, width = 8, height = 4) else print(figs)
+```
+
 Then we plot the difference between multivariate and univariate methods for each TRR model (Pearson correlation or HBM):
 
 ```{r, scatter-uvmv-diff, echo = F, message = F, fig.dim = c(6, 6), out.width = "50%", fig.align="center"}
