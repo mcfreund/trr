@@ -15,6 +15,10 @@ Here we plot the TRRs estimated by Pearson correlation and hierarchical Bayesian
 
 ![plot of chunk scatters-uvmv](figure/scatters-uvmv-1.png)
 
+We fit two ellipses for the distribution over control and non-control regions respectively.
+
+![plot of chunk fit-ellipses](figure/fit-ellipses-1.png)
+
 Then we investigate the improvements by replacing Pearson correaltion with Bayesian model:
 
 <img src="figure/scatter-bias-1.png" title="plot of chunk scatter-bias" alt="plot of chunk scatter-bias" width="50%" style="display: block; margin: auto;" />

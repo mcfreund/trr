@@ -80,6 +80,31 @@ figs <- figs + plot_layout(guides = "collect") +
 if (debugging) ggsave("tmp.png", plot = figs, width = 8, height = 4) else print(figs)
 ```
 
+We fit two ellipses for the distribution over control and non-control regions respectively.
+
+```{r, fit-ellipses, echo = F, message = F, fig.dim = c(8, 4)}
+# lim <- range(trr_res$trr)
+lim <- c(-0.55, 1.25)
+tmp <- trr_res %>%
+  pivot_wider(values_from = trr, names_from = response) %>%
+  mutate(is_ctrl_region = !is.na(network_roi))
+for (mdl in models) {
+  fig <- ggplot(tmp %>% filter(model == .env$mdl)) +
+    aes(x = uv, y = rda, color = is_ctrl_region) +
+    scale_color_manual(values = c("TRUE" = "red", "FALSE" = "#7e7e7e77")) +
+    geom_point() +
+    geom_abline(intercept = 0, slope = 1) +
+    stat_ellipse() +
+    labs(x = "uv", y = "rda", title = mdl) +
+    xlim(lim[[1]], lim[[2]]) +
+    ylim(lim[[1]], lim[[2]])
+  if (mdl == "Pearson") figs <- fig else figs <- figs + fig
+}
+figs <- figs + plot_layout(guides = "collect") +
+  plot_annotation(title = paste("TRR over all regions estimated by different methods"))
+if (debugging) ggsave("tmp.png", plot = figs, width = 8, height = 4) else print(figs)
+```
+
 Then we investigate the improvements by replacing Pearson correaltion with Bayesian model:
 
 ```{r, scatter-bias, echo = F, message = F, fig.dim = c(6, 6), out.width = "50%", fig.align="center"}
