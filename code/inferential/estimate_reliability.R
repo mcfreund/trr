@@ -52,14 +52,14 @@ source(here("code", "_funs.R"))
 ################### Command line parameters ######################
 
 args <- commandArgs(trailingOnly = TRUE)
-stopifnot(length(args) <= 4)
 
 # Help
-if (length(args) == 0) {
+if (length(args) == 0 || length(args) > 5) {
   print(paste(
     "Usage: Rscript estimate_reliability.R",
-    "[response_name = rda / uv] [n_cores (default = 4)]",
-    "[roi_idx_first (default = 1)] [roi_idx_last (default = 2)]"
+    "[response_name (rda/uv)] [n_cores (default = 4)]",
+    "[roi_idx_first (default = 1)] [roi_idx_last (default = 2)]",
+    "[test_session (default = \"baseline\")]"
   ))
   q()
 }
@@ -77,13 +77,15 @@ if (length(args) >= 4) roi_idx_last <- strtoi(args[[4]]) else roi_idx_last <- 2
 stopifnot(roi_idx_first <= roi_idx_last)
 roi_idx <- roi_idx_first:roi_idx_last
 
+# Test on which session
+if (length(args) >= 5) sessions <- c(args[[5]]) else sessions <- c("baseline")
+
 
 ########################## Constants ##############################
 
 n_core_brm <- 4  # Number of cores for parallelization within brm()
 file_refit <- "on_change"  ## "on_change", "never", "always", see help(brm)
 tasks <- "Stroop"
-sessions <- c("baseline")
 vterm <- switch(response_names[[1]],
   rda = "value.rda",
   ridge = "value.ridge",
@@ -173,8 +175,8 @@ rm(d, d_wide)
 needs_refit <- enlist(combo_paste(model_names, "__", response_names, "__", sessions))
 
 # CHPC only
-session <- "baseline"
-model_name <- "no_lscov_symm"
+session <- sessions[[1]]
+model_name <- model_names[[1]]
 response_name <- response_names[[1]]
 
 input_for_bayes_i <- input_for_bayes %>% filter(test_session == session)
