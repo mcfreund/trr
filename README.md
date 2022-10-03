@@ -86,5 +86,5 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
 - Population-level effects
 - Variance ratio
 - TRR:
-  - Pearson correlation (maybe switching to ICC later?)
+  - Pearson correlation (ICC(3, 1))
   - Posterior summary statistics: mean / median / mode
