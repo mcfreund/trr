@@ -56,6 +56,55 @@ trr_res <- bind_rows(list(Pearson = cor_res, Bayesian = bayes_res), .id = "model
   arrange(network_roi, region, model, response)
 ```
 
+Highly reliable regions:
+
+```{r, high-trr, echo = F, message = F}
+trr_thres <- 0.7
+for (mdl in models) {
+  for (res in responses) {
+    tmp <- trr_res %>%
+      filter(response == .env$res, model == .env$mdl)
+    n_reliable <- sum(tmp$trr > trr_thres)
+    fig <- brain_plot(tmp, stat_term = "trr", lim = c(trr_thres, 1),
+      fig_title = paste(mdl, res, ", n =", n_reliable))
+    if (mdl == models[[1]] & res == responses[[1]]) figs <- fig else figs <- figs + fig
+  }
+}
+figs <- figs + plot_layout(nrow = 2, guides = "collect") +
+  plot_annotation(title = paste("Parcels with TRR >", trr_thres))
+if (debugging) ggsave("tmp.png", plot = figs, width = 8, height = 4) else print(figs)
+```
+
+We take a look at the fixed effect:
+
+```{r, scatters-t, echo = FALSE, message = FALSE, fig.dim = c(8, 4)}
+lim <- c(0, 8)
+for (i in c(1, 2)) {
+  tmp <- dat %>%
+    filter(Term == paste0("hilo_wave", i)) %>%
+    mutate(
+      t = abs(Estimate) / `Est.Error`,
+      network = map_chr(region, ~ strsplit(., "_")[[1]][[3]]),
+      is_ctrl_region = network %in% cont_networks
+    ) %>%
+    select(response, t, region, is_ctrl_region) %>%
+    pivot_wider(values_from = t, names_from = response)
+  fig <- ggplot(tmp) +
+    aes(x = uv, y = rda, color = is_ctrl_region) +
+    scale_color_manual(values = c("TRUE" = "red", "FALSE" = "#7e7e7e77")) +
+    geom_point() +
+    stat_ellipse() +
+    geom_abline(intercept = 0, slope = 1, linetype = "dotted") +
+    labs(x = "uv", y = "rda", title = paste0("wave", i)) +
+    xlim(lim[[1]], lim[[2]]) +
+    ylim(lim[[1]], lim[[2]])
+  if (i == 1) figs <- fig else figs <- figs + fig
+}
+figs <- figs +
+  plot_annotation(title = "abs(t(hilo)) for each wave and response variable")
+if (debugging) ggsave("tmp.png", plot = figs, width = 8, height = 4) else print(figs)
+```
+
 Here we plot the TRRs estimated by Pearson correlation and hierarchical Bayesian model (no_lscov_symm).
 
 ```{r, scatters-uvmv, echo = FALSE, message = FALSE, fig.dim = c(8, 4)}

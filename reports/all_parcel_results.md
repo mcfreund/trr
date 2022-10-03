@@ -11,6 +11,14 @@ output:
 
 
 
+Highly reliable regions:
+
+![plot of chunk high-trr](figure/high-trr-1.png)
+
+We take a look at the fixed effect:
+
+![plot of chunk scatters-t](figure/scatters-t-1.png)
+
 Here we plot the TRRs estimated by Pearson correlation and hierarchical Bayesian model (no_lscov_symm).
 
 ![plot of chunk scatters-uvmv](figure/scatters-uvmv-1.png)
