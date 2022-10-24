@@ -75,14 +75,15 @@ roi_col <- "parcel"  ## "parcel" or "network"
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
 n_cores <- 18
-do_waves <- c(2, 3)
+do_waves <- c(1, 2)
 subjs <- switch(toString(do_waves),
   "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
 )
 input_fname <- here("in", "behav",
   paste0("behavior-and-events_wave", do_waves[1], do_waves[2], "_alltasks.csv")
 )
-file_name_resamples <- here("out", "spatial",
+path_base <- "/data/nil-external/ccp/chenr/trr"
+file_name_resamples <- file.path(path_base, "out", "spatial",
   paste0("trialidx_stroop_congruency_wave", do_waves[1], do_waves[2], ".RDS")
 )
 
@@ -113,7 +114,8 @@ alltrials <- read_results(
   glmname = "null_2rpm",
   filename_fun = function(...) "errts_trials_target_epoch.RDS",
   read_fun = readRDS,
-  n_cores = n_cores
+  n_cores = n_cores,
+  path_base = file.path(path_base, "out", "timeseries")
 )
 
 
@@ -146,7 +148,7 @@ if (FALSE) {
   subj_i <- which(subjs == "448347")
   task_i <- 1
   wave_i <- 2
-  session_i <- 1
+  session_i <- 3
   roi_i <- 1
 }
 
