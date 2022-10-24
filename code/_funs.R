@@ -3,7 +3,10 @@ read_gifti2matrix <- function(name){
     matrix(unlist(d, use.names = FALSE), nrow = length(d), byrow = TRUE)
 }
 
-read_results <- function(waves, tasks, sessions, subjs, glmname, filename_fun, read_fun, n_cores = 20) {
+read_results <- function(
+  waves, tasks, sessions, subjs, glmname, filename_fun, read_fun, n_cores = 20,
+  path_base = here::here("out", "timeseries")
+  ) {
   
 
   cl <- parallel::makeCluster(n_cores, type = "FORK")
@@ -25,8 +28,8 @@ read_results <- function(waves, tasks, sessions, subjs, glmname, filename_fun, r
       )
       
       filename_full <- 
-        here::here(
-          "out", "timeseries", name_subj_i, "RESULTS", name_task_i, 
+        file.path(
+          path_base, name_subj_i, "RESULTS", name_task_i, 
           paste0(name_session_i, "_", glmname, "_", name_wave_i), 
           filename
           )
