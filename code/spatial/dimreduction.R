@@ -44,12 +44,9 @@ print(noquote(paste0("num resamples: ", n_resamples)))
 
 ## out file name
 file_name <- paste0(
-  "projections__stroop__rda__n_resamples", n_resamples,
+  "signalnoise__stroop",
   switch(demean_run + 1, "", "__demean_run"),
-  switch(divnorm_vertex + 1, "", "__divnorm_vertex"),
-  switch(divnorm_trial + 1, "", "__divnorm_trial"),
-  switch(demean_trial + 1, "", "__demean_trial"),
-  "__cv_allsess_wave", do_waves[1], do_waves[2], ".csv"
+  "__baseline__wave", do_waves[1], do_waves[2], ".csv"
 )
 
 ## read trial-wise coefficients:
@@ -72,19 +69,6 @@ behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols
 
 
 ## utilities ----
-
-# ## convenience function for use with klaR::rda()
-# ldf <- function(object, newdata, class_names = c("hi", "lo")) {
-#   ## class_names: positive class first
-#   r <- object$regularization
-#   if (r["lambda"] < 1) stop("Not configured for QDA.")
-#   sigmahat <- object$covpooled
-#   scaled_identity <- mean(diag(sigmahat)) * diag(nrow(sigmahat))
-#   sigmahat_reg <- (1 - r["gamma"]) * sigmahat + r["gamma"] * scaled_identity
-#   w <- solve(sigmahat_reg) %*% (object$means[, class_names] %*% rbind(1, -1))
-#   w <- w / sqrt(sum(w^2))  ## scale to unit length
-#   newdata %*% w
-# }
 
 
 ## for dev/interactive use:
@@ -169,15 +153,16 @@ allres <-
       eigvals <- pca$values
       eigvecs_unscaled <- scale(eigvecs, center = FALSE, scale = 1/eigvals)
       d <- data.frame(
+        dimension = seq_len(n_vert),
         eigvals = eigvals,  ## variance (length^2) of each noise dim
         cossim_noise_unif = crossprod(eigvecs, unif),  ## cosine similarity between uniform and eigenvector
         proj_noise_unif = crossprod(eigvecs_unscaled, unif),  ## variance along uniform dim per noise dimension
         proj_noise_unif_scaled = crossprod(eigvecs_unscaled, unif) / sum(eigvals),  ## as proportion of total noise
         cossim_signal_noise = abs(crossprod(eigvecs, signal_vec_scaled)),
-        proj_signal_noise = crossprod(eigvecs, signal_vec) %>% abs,  ## amount of signal variance on each noise dim
-        proj_signal_noise_scaled = abs(crossprod(eigvecs, signal_vec)) / ssq_signal,  ## scaled by total signal
-        snr = abs(crossprod(eigvecs, signal_vec)) / eigvals,
-        ssq_signal = ssq_signal,
+        proj_signal_noise = abs(crossprod(eigvecs, signal_vec)),  ## length of signal on each noise dim
+        proj_signal_noise_scaled = crossprod(eigvecs, signal_vec)^2 / ssq_signal,  ## proportion of var on noise dim
+        snr = proj_signal_noise^2 / eigvals,
+        ssq_signal = ssq_signal,  ## these are sacalars so will be duplicated in output
         cossim_signal_unif = crossprod(signal_vec / sqrt(ssq_signal), unif)
       )
 
@@ -189,8 +174,13 @@ allres <-
     out$wave <- wave_val
     out$session <- session_val
 
-    return(out)
+    return(list(out))
 
 }
 stopCluster(cl)
 
+out <- rbindlist(allres)
+fwrite(out, here("out", "spatial", file_name))
+
+
+sum(d$proj_signal_noise^2) - ssq_signal
