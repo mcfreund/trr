@@ -285,3 +285,34 @@ max_aposteriori <- function(x) {
   d <- density(x)
   d$x[which.max(d$y)]
 }
+
+
+read_summarize_hbm <- function(
+  model_nm, response, session, base_path, atlas_nm, roi_nm, sum_fun = identity, ...
+  ) {
+  file_name <- file.path(
+      base_path, atlas_nm, roi_nm,
+      paste0(get_model_info(model_nm, response, session)$model_prefix, ".rds")
+      )
+  mod <- readRDS(file_name)
+  sum_fun(mod, ...)
+}
+add_names_and_bind <- function(res, .l) {
+  for (i in seq_along(res)) {
+    res[[i]] <- cbind(res[[i]], .l[i, ])
+  }
+  bind_rows(res)
+}
+future_pmap_bind <- function(.x, .f, ...) add_names_and_bind(future_pmap(.x, .f, ...), .x)
+
+get_network <- function(x, get_8 = FALSE) {
+  res <- gsub("17Networks_.H_([[:alpha:]]*)_.*", "\\1", x)
+  if(get_8) res <- sub(".$|Par|Cent|Peri", "", res)
+  res
+}
+
+
+arsinh <- scales::trans_new("signed_log",
+       transform = function(x) asinh(x),
+       inverse = function(x) sinh(x)
+)

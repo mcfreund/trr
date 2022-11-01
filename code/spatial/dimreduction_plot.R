@@ -77,9 +77,22 @@ p_var <-
   annotate(geom = "text", x = 2, y = 0.7, label = "noise", color = "#ea00ff", size = 8) +
   annotate(geom = "text", x = 2, y = 0.7, label = "\n\nsignal", color = "#0073ff", size = 8) +
   stat_summary(fun = mean, geom = "line", aes(group = paste0(variable)), size = 1) +
-  labs(y = "var / total var", x = "PC (log scale)") +
+  labs(y = "var / total var", x = "PC") +
   scale_color_manual(values = c(eigvals_scaled = "#ea00ff", proj_signal_noise_scaled = "#0073ff")) +
   scale_x_continuous(trans = "log", breaks = c(1:10, 20))
+
+p_snr <-
+  dl[as.numeric(dimension) < 21 & variable %in% c("eigvals", "proj_signal_noise")] %>%
+  dcast(... ~ variable, value.var = "value") %>%
+  mutate(snr = proj_signal_noise^2 / eigvals) %>%
+  .[, .(snr = mean(snr)), by = c("roi", "dimension")] %>%
+  ggplot(aes(as.numeric(dimension), snr)) +
+  geom_line(aes(group = roi), alpha = 0.1) +
+  stat_summary(fun = mean, geom = "line", size = 1, color = "#31a354") +
+  labs(y = "SNR", x = "PC") +
+  scale_color_manual(values = c(eigvals_scaled = "#ea00ff", proj_signal_noise_scaled = "#0073ff")) +
+  scale_x_continuous(trans = "log", breaks = c(1:10, 20))
+
 
 noise_d1 <- dl[
   dimension == 1 & roi %in% key_rois & variable == "cossim_noise_unif",
@@ -89,7 +102,7 @@ p_noise_unif <-
   dl[as.numeric(dimension) < 21 & roi %in% key_rois & variable %in% "cossim_noise_unif"] %>%
   ggplot(aes(as.numeric(dimension), value)) +
   stat_summary(fun = mean, geom = "line", aes(group = roi), alpha = 0.5, color = "#ea00ff") +
-  labs(y = "cos(angle w. unity)", x = "PC (log scale)") +
+  labs(y = "cos(angle w. unity)", x = "PC") +
   scale_y_continuous(limits = c(0, 1)) +
   scale_x_continuous(trans = "log", breaks = c(1:10, 20))
 
@@ -114,7 +127,8 @@ p_signal_unif <-
   coord_flip(xlim = c(0, 1)) +
   scale_y_reverse(breaks = c(0, 7, 15))
 
+p_spectrum <- p_var / p_snr
 p_unif <- p_signal_unif + p_noise_unif + plot_layout(ncol = 2, widths = c(1, 5))
 
-ggsave(here("figs", "dimreduction", "variance.pdf"), p_var, device = "pdf", width = 5, height = 3)
+ggsave(here("figs", "dimreduction", "spectrum.pdf"), p_spectrum, device = "pdf", width = 5, height = 6)
 ggsave(here("figs", "dimreduction", "uniformity.pdf"), p_unif, device = "pdf", width = 5, height = 3)
