@@ -66,6 +66,7 @@ alltrials <- read_results(
 behav <- fread(input_fname, na.strings = c("", "NA"))
 cols <- c("subj", "wave", "task", "session", "trialtype", variable, "trialnum")
 behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols]
+weights <- fread("/data/nil-external/ccp/freund/trr/out/spatial/weights__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12.csv")
 
 
 ## utilities ----
@@ -99,6 +100,7 @@ allres <-
     meta <- behav[subj == subj_val & wave == wave_val & session == session_val & task == task_val]
     y <- meta[[variable]]  ## classes / outcome vector
     rownames(trials) <- y
+    w <- weights[task == task_val & test_session == session_val & subj == subj_val & wave == wave_val]
 
     ## identify run1 vs run2 trials
     is_run1 <- seq_len(nrow(trials)) < (n_trialspr[paste0(task_val, "_", session_val)] + 1)
@@ -130,12 +132,15 @@ allres <-
     ## loop over ROIs and train/test models:
     res <-  mfutils::enlist(rois)
     for (roi_i in seq_along(rois)) {
+      ## extract weights:
+      w_i <- w[roi == rois[roi_i], w]
       ## extract roi_i for each session
       parc <- parcs[[roi_i]]  ## vertex by trial
       ## remove vertices with no BOLD variance
       is_good_vertex <- !is_equal(Var(parc, 1, na.rm = TRUE), 0)
       b <- parc[is_good_vertex, ]
       n_vert <- nrow(b)
+      stopifnot(n_vert == length(w_i))
 
       unif <- cbind(rep(1, n_vert) / sqrt(n_vert))  ## uniform dimension, scaled to unit variance
 
@@ -143,6 +148,9 @@ allres <-
       signal_vec <- average(b, y_good) %*% cbind(c(1, -1)) / 2
       ssq_signal <- sum(signal_vec^2)
       signal_vec_scaled <- signal_vec / sqrt(ssq_signal)  ## for projectng noise vectors
+
+      ssq_weights <- sum(w_i^2)
+      weights_scaled <- w_i / sqrt(ssq_weights)
 
       ## get noise distribution using pooled within-class covariance
       s <- vector("list", n_classes)
@@ -161,9 +169,14 @@ allres <-
         cossim_signal_noise = abs(crossprod(eigvecs, signal_vec_scaled)),
         proj_signal_noise = abs(crossprod(eigvecs, signal_vec)),  ## length of signal on each noise dim
         proj_signal_noise_scaled = crossprod(eigvecs, signal_vec)^2 / ssq_signal,  ## proportion of var on noise dim
-        snr = proj_signal_noise^2 / eigvals,
+        snr = crossprod(eigvecs, signal_vec)^2 / eigvals,
         ssq_signal = ssq_signal,  ## these are sacalars so will be duplicated in output
-        cossim_signal_unif = crossprod(signal_vec / sqrt(ssq_signal), unif)
+        cossim_signal_unif = crossprod(signal_vec / sqrt(ssq_signal), unif),
+        cossim_weights_unif = weights_scaled %*% unif, ## alignment btw weights and unif
+        proj_weights_noise = abs(crossprod(eigvecs, w_i)),  ## length of weights on each noise dim
+        proj_weights_noise_scaled = crossprod(eigvecs, w_i)^2 / ssq_weights,  ## proportion of var on noise dim
+        cossim_signal_weights = c(weights_scaled %*% signal_vec_scaled),
+        ssq_weights = ssq_weights
       )
 
       res[[roi_i]] <- d
@@ -181,6 +194,3 @@ stopCluster(cl)
 
 out <- rbindlist(allres)
 fwrite(out, here("out", "spatial", file_name))
-
-
-sum(d$proj_signal_noise^2) - ssq_signal
