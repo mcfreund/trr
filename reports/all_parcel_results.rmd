@@ -56,6 +56,21 @@ trr_res <- bind_rows(list(Pearson = cor_res, Bayesian = bayes_res), .id = "model
   arrange(network_roi, region, model, response)
 ```
 
+(New) contingency table:
+
+```{r, contingency, echo = F, message = F}
+crres <- cor_res %>% rename(ICC = trr)
+trres <- dat %>%
+  filter(Term == "TRR") %>%
+  rename(HBM_MAP = Estimate, uncertainty = `Est.Error`) %>%
+  select(region, response, HBM_MAP, uncertainty)
+
+res <- inner_join(crres, trres) %>%
+  pivot_wider(names_from = response, values_from = c(ICC, HBM_MAP, uncertainty))
+
+head(res)
+```
+
 Highly reliable regions:
 
 ```{r, high-trr, echo = F, message = F}
