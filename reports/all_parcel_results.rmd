@@ -22,7 +22,7 @@ source(here("code", "inferential", "_plotting.R"))
 core32_roi <- rois[core32]
 
 debugging <- FALSE
-input_name <- "Schaefer400_stats.rds"
+input_name <- "Schaefer400_stats_new.rds"
 test_session <- "baseline"
 responses <- c("uv", "rda")  # The first one is used as the base level
 cont_networks <- c("ContA", "ContB", "DorsAttnA", "DorsAttnB")
@@ -62,13 +62,18 @@ trr_res <- bind_rows(list(Pearson = cor_res, Bayesian = bayes_res), .id = "model
 crres <- cor_res %>% rename(ICC = trr)
 trres <- dat %>%
   filter(Term == "TRR") %>%
-  rename(HBM_MAP = Estimate, uncertainty = `Est.Error`) %>%
+  rename(HBM_MAP = MAP, uncertainty = `Est.Error`) %>%
   select(region, response, HBM_MAP, uncertainty)
 
 res <- inner_join(crres, trres) %>%
   pivot_wider(names_from = response, values_from = c(ICC, HBM_MAP, uncertainty))
 
-head(res)
+res <- res %>%
+  mutate(mv_HBM_vs_uv_HBM = sign(HBM_MAP_rda - HBM_MAP_uv),
+    uv_HBM_vs_uv_ICC = sign(HBM_MAP_uv - ICC_uv), uv_uncty_vs_mv_uncty = sign(uncertainty_uv - uncertainty_rda)) %>%
+  group_by(mv_HBM_vs_uv_HBM, uv_HBM_vs_uv_ICC, uv_uncty_vs_mv_uncty)
+
+res %>% summarize(n = n())
 ```
 
 Highly reliable regions:

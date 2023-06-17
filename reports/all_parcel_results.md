@@ -15,15 +15,18 @@ output:
 
 
 ```
-## # A tibble: 6 × 7
-##   region                      ICC_rda ICC_uv HBM_MAP_rda HBM_MAP_uv uncertainty_rda uncertainty_uv
-##   <chr>                         <dbl>  <dbl>       <dbl>      <dbl>           <dbl>          <dbl>
-## 1 17Networks_LH_ContA_Cingm_1 -0.101   0.293     -0.0852      0.210           0.565          0.540
-## 2 17Networks_LH_ContA_IPS_1    0.531   0.592      0.612       0.864           0.193          0.144
-## 3 17Networks_LH_ContA_IPS_2   -0.0428  0.482      0.462       0.631           0.423          0.352
-## 4 17Networks_LH_ContA_IPS_3    0.537   0.397      0.607       0.699           0.192          0.261
-## 5 17Networks_LH_ContA_IPS_4    0.639   0.621      0.780       0.829           0.160          0.177
-## 6 17Networks_LH_ContA_IPS_5    0.712   0.537      0.889       0.826           0.107          0.180
+## # A tibble: 8 × 4
+## # Groups:   mv_HBM_vs_uv_HBM, uv_HBM_vs_uv_ICC [4]
+##   mv_HBM_vs_uv_HBM uv_HBM_vs_uv_ICC uv_uncty_vs_mv_uncty     n
+##              <dbl>            <dbl>                <dbl> <int>
+## 1               -1               -1                   -1     6
+## 2               -1               -1                    1    11
+## 3               -1                1                   -1    83
+## 4               -1                1                    1   118
+## 5                1               -1                   -1    19
+## 6                1               -1                    1    61
+## 7                1                1                   -1     9
+## 8                1                1                    1    93
 ```
 
 Highly reliable regions:

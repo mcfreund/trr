@@ -227,4 +227,4 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
 
 res <- prep_mdl(model_names = c("no_lscov_symm"),
   response_names = c("uv", "rda"), in_path = here("out", "inferential", atlas_nm))
-saveRDS(res, file = here("out", "inferential", atlas_nm, "Schaefer400_stats.rds"))
+saveRDS(res, file = here("out", "inferential", atlas_nm, "Schaefer400_stats_new.rds"))
