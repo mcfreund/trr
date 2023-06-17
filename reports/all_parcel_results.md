@@ -19,13 +19,13 @@ output:
 ## # Groups:   mv_HBM_vs_uv_HBM, uv_HBM_vs_uv_ICC [4]
 ##   mv_HBM_vs_uv_HBM uv_HBM_vs_uv_ICC uv_uncty_vs_mv_uncty     n
 ##              <dbl>            <dbl>                <dbl> <int>
-## 1               -1               -1                   -1     6
+## 1               -1               -1                   -1     5
 ## 2               -1               -1                    1    11
-## 3               -1                1                   -1    83
-## 4               -1                1                    1   118
-## 5                1               -1                   -1    19
-## 6                1               -1                    1    61
-## 7                1                1                   -1     9
+## 3               -1                1                   -1    82
+## 4               -1                1                    1   116
+## 5                1               -1                   -1    20
+## 6                1               -1                    1    63
+## 7                1                1                   -1    10
 ## 8                1                1                    1    93
 ```
 

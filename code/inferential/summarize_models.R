@@ -38,7 +38,7 @@ if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
 # - n: number of points for density calculation, by default 100
 #
 # Ouput: a numeric value, the peak position of the density distribution
-rvar_map <- function(x, n = 100) {
+rvar_map <- function(x, n = 512) {
   segs <- seq(min(x), max(x), length.out = n)
   d <- density(x, segs)
   segs[[which.max(d)]]
