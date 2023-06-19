@@ -246,7 +246,35 @@ s_hbm_subj_ratio_sum <- s_hbm_subj_ratio[,
 ##
 ## Save data
 
-plt_dat <- list(s_pop_t_brain = s_pop_t_brain, 
-  s_hbm_posterior_sum = s_hbm_posterior_sum, r_summarystat = r_summarystat, s_hbm_subj_ratio_sum = s_hbm_subj_ratio_sum)
+# Populational Stroop effect for UV
+uv_popt <- s_pop_t_brain %>%
+  select(!term) %>%
+  rename(uv_pop_tstat_div = value)
 
-saveRDS(plt_dat, here("out", "inferential", atlas_nm, "plt_dat.rds"))
+# ICC
+ICC <- r_summarystat %>%
+  ungroup() %>%
+  filter(session == "baseline") %>%
+  mutate(response = recode(response, rda = "mv")) %>%
+  rename(region = roi_nm, ICC = r) %>%
+  select(!c(model_nm, network, session)) %>%
+  pivot_wider(names_from = response, values_from = ICC) %>%
+  rename(mv_ICC = mv, uv_ICC = uv)
+
+# HBM TRR & Variability ratio
+HBM <- s_hbm_posterior_sum %>%
+  rename(region = roi_nm) %>%
+  rbind(s_hbm_subj_ratio_sum) %>%
+  filter(session == "baseline", model_nm == "no_lscov_symm") %>%
+  mutate(response = recode(response, rda = "mv")) %>%
+  select(!c(session, model_nm, network)) %>%
+  pivot_wider(names_from = c(response, variable), values_from = value)
+
+# Combine
+plt_dat <- uv_popt %>%
+  inner_join(ICC, by = "region") %>%
+  inner_join(HBM, by = "region") %>%
+  print()
+
+# Save
+fwrite(plt_dat, file.path(path_out, "inferential", "plt_dat.csv"))
