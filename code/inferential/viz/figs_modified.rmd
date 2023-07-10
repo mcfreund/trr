@@ -398,3 +398,93 @@ eg <- list(
   )
 )
 ```
+
+## Calculate some numbers needed in the results section
+
+```{r calculate-numbers, echo = FALSE, message = FALSE, warning = FALSE}
+# Mean mv_ICC and uv_ICC for ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  summarize(
+    mean_mv_ICC = mean(mv_ICC, na.rm = TRUE),
+    mean_uv_ICC = mean(uv_ICC, na.rm = TRUE)
+  )
+
+# Number of parcels with mv_ICC >= 0.7; number of parcels with uv_ICC >= 0.7
+plt_dat %>%
+  ungroup() %>%
+  summarize(
+    n_mv_ICC_gt_07 = sum(mv_ICC >= 0.7, na.rm = TRUE),
+    n_uv_ICC_gt_07 = sum(uv_ICC >= 0.7, na.rm = TRUE),
+    p_mv_ICC_gt_07 = n_mv_ICC_gt_07 / n() * 100,
+    p_uv_ICC_gt_07 = n_uv_ICC_gt_07 / n() * 100,
+  )
+
+# Mean mv_TRR_map and uv_TRR_map for ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  summarize(
+    mean_mv_TRR = mean(mv_trr_map, na.rm = TRUE),
+    mean_uv_TRR = mean(uv_trr_map, na.rm = TRUE)
+  )
+
+# Mean difference between TRR_map and ICC for uv and mv and for ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  summarize(
+    mv_TRR_vs_ICC = mean(mv_trr_map - mv_ICC, na.rm = TRUE),
+    uv_TRR_vs_ICC = mean(uv_trr_map - uv_ICC, na.rm = TRUE)
+  )
+
+# Number of parcels with mv_trr_map >= 0.7; number of parcels with uv_trr_map >= 0.7
+plt_dat %>%
+  ungroup() %>%
+  summarize(
+    n_mv_trr_gt_07 = sum(mv_trr_map >= 0.7, na.rm = TRUE),
+    n_uv_trr_gt_07 = sum(uv_trr_map >= 0.7, na.rm = TRUE),
+    p_mv_trr_gt_07 = n_mv_trr_gt_07 / n() * 100,
+    p_uv_trr_gt_07 = n_uv_trr_gt_07 / n() * 100,
+  )
+
+# Mean of trr_precision for mv and uv in ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  mutate(uv_precision = 1 / uv_trr_sd,
+    mv_precision = 1 / mv_trr_sd) %>%
+  summarize(
+    mean_mv_precision = mean(mv_precision, na.rm = TRUE),
+    mean_uv_precision = mean(uv_precision, na.rm = TRUE)
+  )
+
+# Number and proportion of parcels with mv_precision > uv_precision in ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  mutate(uv_precision = 1 / uv_trr_sd,
+    mv_precision = 1 / mv_trr_sd) %>%
+  group_by(is_roi) %>%
+  summarize(
+    n_mv_more_precise = sum(mv_precision > uv_precision, na.rm = TRUE),
+    n_uv_more_precise = sum(mv_precision < uv_precision, na.rm = TRUE),
+    p_mv_more_precise = n_mv_more_precise / n() * 100,
+    p_uv_more_precise = n_uv_more_precise / n() * 100,
+  )
+
+# Number and proportion of parcels with mv_precision > uv_precision and mv_ratio < uv_ratio
+plt_dat %>%
+  ungroup() %>%
+  mutate(uv_precision = 1 / uv_trr_sd,
+    mv_precision = 1 / mv_trr_sd) %>%
+  summarize(
+    n_mv_precise_and_less_noise = sum(mv_precision > uv_precision & mv_ratio < uv_ratio, na.rm = TRUE),
+    p_mv_precise_and_less_noise = n_mv_precise_and_less_noise / n() * 100,
+  )
+```
