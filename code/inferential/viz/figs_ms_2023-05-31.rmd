@@ -9,17 +9,21 @@ output:
         number_sections: true
         df_print: paged
         code_folding: hide
+params:
+  roi_obj: "top_t"
 ---
 
 
 
 ```{r setup, results = FALSE, message = FALSE, echo = FALSE, warning = FALSE}
 
+
 if (!interactive()) {
   rmarkdown::render(
     input = here::here("code", "inferential", "viz", "figs_ms_2023-05-31.rmd"),
     output_file = here::here("reports", "figs_ms_2023-05-31.html")
     )
+  params <- list(roi_obj = "top_t")
 }
 
 library(here)
@@ -92,10 +96,14 @@ models_hbm <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 atlas_nm <- "schaefer2018_17_400_fsaverage5"
 roi_col <- "parcel"  ## "parcel" or "network"
 rois <- mfutils::schaefer2018_17_400_fsaverage5$key[[roi_col]]
+core32 <- rois[core32]  ## replace indices with names
+dmcc35 <- rois[dmcc35]
 
 path_out <- file.path("/data/nil-external/ccp/chenr/trr", "out")
 model_info <- expand.grid(model_nm = "no_lscov_symm", response = responses, roi_nm = rois, session = sessions)
-path_figs <- here("figs", "ms_2023-05-31")
+path_figs <- here("figs", "ms_2023-05-31", params$roi_obj)
+dir.create(path_figs, recursive = TRUE, showWarnings = FALSE)
+
 ```
 
 
@@ -130,9 +138,11 @@ misc <-
 
 # z-scored univariate population effects
 
-To define the z-score, I scaled the mean population hi-lo effect by its standard deviation across subjects (estimated as a subject-level variance component).
+- To define the z-score, I scaled the mean population hi-lo effect by its standard deviation across subjects (estimated as a subject-level variance component).
   - I did this separately per wave, then averaged across waves per parcel.
-  - The first method I tried didn't work well. I first tried scaling each posterior sample of the mean by the SD, per sample of the posterior. However a fair number of samples in some regions had very small SDs, so the z-score blew up when doing it this way. Instead I summarized over posterior samples, then calculated the z-score.
+  - The first method I tried didn't work well. I first tried scaling each posterior sample of the mean by the SD, per sample of the posterior.
+  However a fair number of samples in some regions had very small SDs, so the z-score blew up when doing it this way.
+  Instead I summarized over posterior samples, then calculated the z-score.
 
 I defined ROIs using a percentage threshold: top 10% (40 parcels)
 
@@ -311,7 +321,8 @@ p_pop_z
 ## t-stats
 
 This seems a bit better to me.
-While the units of z-score may be more intuitive than t-statistic, I think the t-statistic makes more conceptual sense in our case. It shows the the effect size relative to the overall uncertainty in the effect size---which (I am pretty sure) integrates the influence of both trial and subject-level variability.
+While the units of z-score may be more intuitive than t-statistic, I think the t-statistic makes more conceptual sense in our case.
+It shows the the effect size relative to the overall uncertainty in the effect size---which (I am pretty sure) integrates the influence of both trial and subject-level variability.
 
 ```{r}
 
@@ -451,6 +462,12 @@ print(table_rois_t[order(-t)])
 
 
 
+
+
+
+
+
+
 # univariate: HBM vs summarystat | ROI status
 
 ```{r, cache = TRUE}
@@ -534,7 +551,7 @@ trr_stats_uv <- full_join(
   ) %>%
   rename(region = roi_nm)
 
-p_trr_stats_uv <- 
+p_trr_stats_uv <-
   trr_stats_uv %>%
   group_by(model_nm) %>%
   ggplot() +
@@ -558,31 +575,42 @@ p_trr_stats_uv <-
     ) +
   guides(fill = guide_colorbar(title.position = "left", title.vjust = 0.9)) +
   geom_text(
-    data = data.frame(x = -50, y = 100, label = c("ICC", "HBM"), model_nm = c("summarystat", "no_lscov_symm")),
+    data = data.frame(x = -50, y = 100, label = c("ICC", "HBM-MAP"), model_nm = c("summarystat", "no_lscov_symm")),
     aes(x = x, y = y, label = label),
     size = 5, color = "black", hjust = 0.5, vjust = 0.5, angle = 90
   ) +
   labs(fill = "TRR")
 
-
 p_delta_trr_line <- trr_stats_uv %>%
   mutate(
-    is_roi = region %in% s_pop_t_brain[is_roi == TRUE, region],
-    model_nm = ifelse(model_nm == "summarystat", "ICC", "HBM"),
-    model_nm = factor(model_nm, levels = c("ICC", "HBM"))
-    ) %>%
-  group_by(is_roi, model_nm) %>%
+    is_roi = region %in% get(params$roi_obj),
+    model_nm = ifelse(model_nm == "summarystat", "ICC", "HBM-MAP"),
+    model_nm = factor(model_nm, levels = c("ICC", "HBM-MAP"))
+  ) %>%
   ggplot(aes(model_nm, value, color = is_roi, fill = is_roi)) +
-  geom_line(aes(group = region), alpha = 0.1) +
-  geom_point(size = 0.5, alpha = 0.1, shape = 21) +
-  geom_point(stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
+  geom_line(data = . %>% filter(!is_roi), aes(group = region), alpha = 0.1) +
+  geom_point(data = . %>% filter(!is_roi), size = 0.5, alpha = 0.1, shape = 21) +
+  geom_line(data = . %>% filter(is_roi), aes(group = region), alpha = 1/3) +
+  geom_point(data = . %>% filter(is_roi), size = 0.5, alpha = 1/3, shape = 21) +
+  geom_line(data = . %>% filter(!is_roi), stat = "summary", fun = "mean", aes(group = is_roi)) +
+  geom_point(data = . %>% filter(!is_roi), stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
+  geom_line(data = . %>% filter(is_roi), stat = "summary", fun = "mean", aes(group = is_roi)) +
+  geom_point(data = . %>% filter(is_roi), stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
   scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
   scale_fill_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
-  facet_grid(
-    cols = vars(is_roi),
-    #labeller = labeller(is_roi = c(`TRUE` = "ROI", `FALSE` = "non-ROI"))
-    labeller = labeller(is_roi = c(`TRUE` = "ROI\n%ile(t)<0.1", `FALSE` = "non-ROI\n%ile(t)>0.1"))
-    ) +
+  # facet_grid(
+  #   cols = vars(is_roi),
+  #   labeller = labeller(is_roi = c(`TRUE` = "ROI", `FALSE` = "non-ROI"))
+  #   #labeller = labeller(is_roi = c(`TRUE` = "ROI\n%ile(t)<0.1", `FALSE` = "non-ROI\n%ile(t)>0.1"))
+  #   ) +
+  geom_text(
+    data = data.frame(
+      label = c("ROI", "\n\nnon-ROI"),
+      is_roi = c(TRUE, FALSE),
+      x = 1.5,
+      y = c(1, -1/2)
+      ),
+    aes(label = label, x = x, y = y), hjust = 0.5, vjust = 0.5, size = 4) +
   scale_y_continuous(limits = c(-1, 1), breaks = c(-1, 0, 1)) +
   theme(
     axis.line.x.bottom = element_blank(),
@@ -590,18 +618,20 @@ p_delta_trr_line <- trr_stats_uv %>%
     axis.ticks.x = element_blank(),
     legend.position = "none"
     ) +
-  labs(
-    x = "Mean hi-lo contrast (t)",
-    y = "TRR"
-  )
+  labs(y = "TRR")
 
-p_delta_trr_scatter <- trr_stats_uv %>%  
+p_delta_trr_t_scatter <- 
+  trr_stats_uv %>% 
   mutate(value = atanh(value)) %>%
   pivot_wider(id_cols = region, names_from = model_nm, values_from = value) %>%
-  mutate(trr_diff = no_lscov_symm - summarystat) %>%
   full_join(s_pop_t_brain %>% rename(t_stat = value)) %>%
+  mutate(
+    trr_diff = no_lscov_symm - summarystat,
+    is_roi = region %in% get(params$roi_obj)
+    ) %>%
   ggplot(aes(t_stat, trr_diff, color = is_roi, fill = is_roi)) +
-  geom_point(shape = 21, size = 3/4) +
+  geom_point(data = . %>% filter(is_roi == FALSE), shape = 21, size = 1) +
+  geom_point(data = . %>% filter(is_roi == TRUE), shape = 21, size = 1) +
   geom_vline(xintercept = 0) +
   geom_hline(yintercept = 0) +
   scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
@@ -613,19 +643,49 @@ p_delta_trr_scatter <- trr_stats_uv %>%
     ) +
   labs(
     x = "Mean Stroop eff. (t)",
-    y = "\u0394TRR, HBM\u2212ICC\n(atanh(r))"
+    y = "\u0394TRR,\nHBM-MAP\u2212ICC\n(atanh(r))"
+  )
+p_delta_trr_t_scatter
+
+p_delta_trr_scatter <- 
+  trr_stats_uv %>% 
+  #mutate(value = atanh(value)) %>%
+  pivot_wider(id_cols = region, names_from = model_nm, values_from = value) %>%
+  mutate(is_roi = region %in% get(params$roi_obj)) %>%
+  ggplot(aes(summarystat, no_lscov_symm, color = is_roi, fill = is_roi)) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  geom_abline() +
+  geom_point(data = . %>% filter(is_roi == FALSE), shape = 21, size = 1) +
+  geom_point(data = . %>% filter(is_roi == TRUE), shape = 21, size = 1) +
+  scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
+  scale_fill_manual(values = c(`FALSE` = "transparent", `TRUE` = "firebrick")) +
+  theme(
+    axis.line.x.bottom = element_blank(),
+    axis.line.y.left = element_blank(),
+    legend.position = "none"
+    ) +
+  labs(
+    x = "ICC TRR (r)",
+    y = "HBM TRR (MAP r)"
   )
 
+
 p_trr_uv <-
-  (p_trr_stats_uv / (p_delta_trr_line | p_delta_trr_scatter)) +
-  plot_layout(heights = c(1.5, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
+  ( p_trr_stats_uv / 
+    ((p_delta_trr_line | p_delta_trr_scatter) + plot_layout(widths = c(1.5, 1)))
+  ) +
+  plot_layout(heights = c(1, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
 ggsave(
   file.path(path_figs, "trr_diff_uv.pdf"),
-  dev = cairo_pdf, width = 6, height = 4.5
+  dev = cairo_pdf, width = 6.5, height = 5.5
   )
 p_trr_uv
 
+
 ```
+
+
 
 
 # summary stat: UV vs MV TRR | brains, roi status
@@ -669,21 +729,34 @@ p_trr_icc_uvmv_brain <- r_summarystat %>%
 p_trr_icc_uvmv_line <- r_summarystat %>%
   filter(session == "baseline") %>%
   mutate(
-    is_roi = region %in% s_pop_t_brain[is_roi == TRUE, region],
+    is_roi = region %in% get(params$roi_obj),
     response = ifelse(response == "rda", "multiv.", "univar."),
     response = factor(response, levels = c("univar.", "multiv."))
     ) %>%
   ggplot(aes(response, r, color = is_roi, fill = is_roi)) +
-  geom_line(aes(group = region), alpha = 0.1) +
-  geom_point(size = 0.5, alpha = 0.1, shape = 21) +
-  geom_point(stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
+  geom_line(data = . %>% filter(!is_roi), aes(group = region), alpha = 0.1) +
+  geom_point(data = . %>% filter(!is_roi), size = 0.5, alpha = 0.1, shape = 21) +
+  geom_line(data = . %>% filter(is_roi), aes(group = region), alpha = 1/3) +
+  geom_point(data = . %>% filter(is_roi), size = 0.5, alpha = 1/3, shape = 21) +
+  geom_line(data = . %>% filter(!is_roi), stat = "summary", fun = "mean", aes(group = is_roi)) +
+  geom_point(data = . %>% filter(!is_roi), stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
+  geom_line(data = . %>% filter(is_roi), stat = "summary", fun = "mean", aes(group = is_roi)) +
+  geom_point(data = . %>% filter(is_roi), stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
   scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
   scale_fill_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
-  facet_grid(
-    cols = vars(is_roi),
-    #labeller = labeller(is_roi = c(`TRUE` = "ROI", `FALSE` = "non-ROI"))
-    labeller = labeller(is_roi = c(`TRUE` = "ROI\n%ile(t)<0.1", `FALSE` = "non-ROI\n%ile(t)>0.1"))
-    ) +
+  # facet_grid(
+  #   cols = vars(is_roi),
+  #   labeller = labeller(is_roi = c(`TRUE` = "ROI", `FALSE` = "non-ROI"))
+  #   #labeller = labeller(is_roi = c(`TRUE` = "ROI\n%ile(t)<0.1", `FALSE` = "non-ROI\n%ile(t)>0.1"))
+  #   ) +
+  geom_text(
+    data = data.frame(
+      label = c("ROI", "\n\nnon-ROI"),
+      is_roi = c(TRUE, FALSE),
+      x = 1.5,
+      y = c(1, -1/2)
+      ),
+  aes(label = label, x = x, y = y), hjust = 0.5, vjust = 0.5, size = 4) +
   scale_y_continuous(limits = c(-1, 1), breaks = c(-1, 0, 1)) +
   theme(
     axis.line.x.bottom = element_blank(),
@@ -697,13 +770,14 @@ p_trr_icc_uvmv_line <- r_summarystat %>%
 p_trr_icc_uvmv_scatter <- 
   r_summarystat %>%  
   filter(session == "baseline") %>%
-  mutate(is_roi = region %in% s_pop_t_brain[is_roi == TRUE, region]) %>%
+  mutate(is_roi = region %in% get(params$roi_obj)) %>%
   pivot_wider(id_cols = c(region, is_roi), names_from = response, values_from = r) %>%
   ggplot(aes(uv, rda, color = is_roi, fill = is_roi)) +
   geom_abline() +
   geom_vline(xintercept = 0) +
   geom_hline(yintercept = 0) +
-  geom_point(shape = 21, size = 3/4) +
+  geom_point(data = . %>% filter(is_roi == FALSE), shape = 21, size = 1) +
+  geom_point(data = . %>% filter(is_roi == TRUE), shape = 21, size = 1) +
   scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
   scale_fill_manual(values = c(`FALSE` = "transparent", `TRUE` = "firebrick")) +
   theme(
@@ -719,17 +793,24 @@ p_trr_icc_uvmv_scatter <-
 
 
 p_trr_icc_uvmv <-
-  (p_trr_icc_uvmv_brain / (p_trr_icc_uvmv_line | p_trr_icc_uvmv_scatter)) +
-  plot_layout(heights = c(1.5, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
+  (
+    p_trr_icc_uvmv_brain / 
+    (p_trr_icc_uvmv_line | p_trr_icc_uvmv_scatter) + plot_layout(widths = c(1.5, 1))
+  ) +
+  plot_layout(heights = c(1, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
 ggsave(
   file.path(path_figs, "trr_icc_uvmv.pdf"),
   p_trr_icc_uvmv,
-  dev = cairo_pdf, width = 6, height = 4.5
+  dev = cairo_pdf, width = 6.5, height = 5.5
   )
-p_trr_icc_uvmv_brain
+p_trr_icc_uvmv
 
 
 ```
+
+
+
+
 
 
 # 1/SD(TRR)
@@ -772,26 +853,37 @@ p_trr_sd_uvmv_brain <- s_hbm_posterior_sum %>%
   ) +
   labs(fill = "Prcsn.(TRR)\n(log scale)")
 
-
-
 p_trr_sd_uvmv_line <- s_hbm_posterior_sum %>%
   filter(session == "baseline", variable == "trr_sd") %>%
   mutate(
-    is_roi = region %in% s_pop_t_brain[is_roi == TRUE, region],
+    is_roi = region %in% get(params$roi_obj),
     response = ifelse(response == "rda", "multiv.", "univar."),
     response = factor(response, levels = c("univar.", "multiv."))
     ) %>%
   ggplot(aes(response, 1/value, color = is_roi, fill = is_roi)) +
-  geom_line(aes(group = region), alpha = 0.1) +
-  geom_point(size = 0.5, alpha = 0.1, shape = 21) +
-  geom_point(stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
+  geom_line(data = . %>% filter(!is_roi), aes(group = region), alpha = 0.1) +
+  geom_point(data = . %>% filter(!is_roi), size = 0.5, alpha = 0.1, shape = 21) +
+  geom_line(data = . %>% filter(is_roi), aes(group = region), alpha = 1/3) +
+  geom_point(data = . %>% filter(is_roi), size = 0.5, alpha = 1/3, shape = 21) +
+  geom_line(data = . %>% filter(!is_roi), stat = "summary", fun = "mean", aes(group = is_roi)) +
+  geom_point(data = . %>% filter(!is_roi), stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
+  geom_line(data = . %>% filter(is_roi), stat = "summary", fun = "mean", aes(group = is_roi)) +
+  geom_point(data = . %>% filter(is_roi), stat = "summary", fun = "mean", size = 4, color = "white", shape = 21) +
   scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
   scale_fill_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
-  facet_grid(
-    cols = vars(is_roi),
-    #labeller = labeller(is_roi = c(`TRUE` = "ROI", `FALSE` = "non-ROI"))
-    labeller = labeller(is_roi = c(`TRUE` = "ROI\n%ile(t)<0.1", `FALSE` = "non-ROI\n%ile(t)>0.1"))
-    ) +
+  # facet_grid(
+  #   cols = vars(is_roi),
+  #   labeller = labeller(is_roi = c(`TRUE` = "ROI", `FALSE` = "non-ROI"))
+  #   #labeller = labeller(is_roi = c(`TRUE` = "ROI\n%ile(t)<0.1", `FALSE` = "non-ROI\n%ile(t)>0.1"))
+  #   ) +
+  geom_text(
+    data = data.frame(
+      label = c("ROI", "\n\nnon-ROI"),
+      is_roi = c(TRUE, FALSE),
+      x = 1.5,
+      y = c(14, 2)
+      ),
+  aes(label = label, x = x, y = y), hjust = 0.5, vjust = 0.5, size = 4) +
   scale_y_continuous(limits = c(1.6, 14), breaks = c(2, 6, 10, 14), trans = "log") +
   theme(
     axis.line.x.bottom = element_blank(),
@@ -805,7 +897,7 @@ p_trr_sd_uvmv_line <- s_hbm_posterior_sum %>%
 p_trr_sd_uvmv_scatter <-
   s_hbm_posterior_sum %>%
   filter(session == "baseline", variable == "trr_sd") %>%
-  mutate(is_roi = region %in% s_pop_t_brain[is_roi == TRUE, region], value = 1/value) %>%
+  mutate(is_roi = region %in% get(params$roi_obj), value = 1/value) %>%
   pivot_wider(id_cols = c(region, is_roi), names_from = response, values_from = value) %>%
   ggplot(aes(uv, rda, color = is_roi, fill = is_roi)) +
   geom_abline() +
@@ -829,12 +921,15 @@ p_trr_sd_uvmv_scatter <-
 
 
 p_trr_sd_uvmv <-
-  (p_trr_sd_uvmv_brain / (p_trr_sd_uvmv_line | p_trr_sd_uvmv_scatter)) +
-  plot_layout(heights = c(1.5, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
+  (
+    p_trr_sd_uvmv_brain / 
+    ((p_trr_sd_uvmv_line | p_trr_sd_uvmv_scatter) + plot_layout(widths = c(1.5, 1)))
+    ) +
+  plot_layout(heights = c(1, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
 ggsave(
   file.path(path_figs, "trr_sd_uvmv.pdf"),
   p_trr_sd_uvmv,
-  dev = cairo_pdf, width = 6, height = 4.5
+  dev = cairo_pdf, width = 6.5, height = 5.5
   )
 p_trr_sd_uvmv
 
@@ -858,7 +953,7 @@ d_tab <- full_join(
     mutate(trr_diff = no_lscov_symm - summarystat),
     by = "region"
   ) %>%
-  full_join(s_pop_t_brain %>% rename(t_stat = value), by = "region") %>%
+  full_join(s_pop_t_brain %>% rename(t_stat = value), by = "region") %>%  ## fix THIS LINE
   mutate(trrsd_response = lr > 0, trr_model = trr_diff > 0)
 
 p_tab <-
@@ -891,36 +986,6 @@ p_tab <-
 #   group_by(trrsd_response, trr_model) %>%
 #   summarise(n = n())
 
-p_eg_scatter <- d_tab %>%
-  ggplot(aes(lr, trr_diff, color = is_roi, fill = is_roi)) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0)  +
-  geom_point(data = . %>% filter(is_roi == FALSE), shape = 21, size = 2) +
-  geom_point(data = . %>% filter(is_roi == TRUE), shape = 21, size = 2) +
-  scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
-  scale_fill_manual(values = c(`FALSE` = "transparent", `TRUE` = "firebrick")) +
-  labs(
-    x = "\u0394Precision(TRR), multiv.\u2212univ.\n(log ratio)",
-    y = "\u0394TRR (univar.), HBM\u2212ICC\n(atanh(r))"
-    ) +
-  theme(legend.position = "none") +
-  geom_text(
-    data = . %>%
-      mutate(
-        trrsd_response = ifelse(trrsd_response, "multiv. > univar.", "multiv. < univar."),
-        trr_model = ifelse(trr_model, "HBM > ICC", "HBM < ICC")
-        ) %>%
-      group_by(trrsd_response, trr_model) %>%
-      summarise(n = n()) %>%
-      mutate(
-        lr = ifelse(trrsd_response == "multiv. > univar.", 1, -0.5),
-        trr_diff = ifelse(trr_model == "HBM > ICC", 0.25, -0.25),
-        is_roi = FALSE
-      ),
-    aes(label = n), size = 10
-    #aes(label = paste0(trrsd_response, ", ", trr_model, ": ", n)),
-    )
-
 d_tab %>%
   ggplot(aes(lr, trr_diff, color = t_stat, fill = t_stat)) +
   geom_hline(yintercept = 0) +
@@ -928,7 +993,7 @@ d_tab %>%
   geom_point(shape = 21, size = 3) +
   scale_color_viridis_c(option = "magma") +
   scale_fill_viridis_c(option = "magma") +
-  labs(x = "\u0394Precision(TRR), multiv.\u2212univ.\n(log ratio)", y = "\u0394TRR (univar.), HBM\u2212ICC\n(atanh(r))")
+  labs(x = "\u0394Precision(TRR), multiv.\u2212univ.\n(log ratio)", y = "\u0394TRR (univar.), HBM-MAP\u2212ICC\n(atanh(r))")
 
 ## example densities:
 
@@ -953,31 +1018,32 @@ if (FALSE) {  ## for choosing example regions
 }
 
 eg <- list(
-  tt =  c(
-    "17Networks_LH_ContA_PFCd_1",
-    "17Networks_LH_DorsAttnA_SPL_7",
-    "17Networks_LH_DorsAttnB_FEF_2",
-    "17Networks_RH_ContA_IPS_1"
-  ),
-  tf =  c(
-    "17Networks_LH_SomMotB_Aud_1",
-    "17Networks_LH_DefaultB_IPL_2",
-    "17Networks_RH_VisCent_ExStr_4",
-    "17Networks_RH_DefaultA_PFCm_3"
-    ),
   ft = c(
-    "17Networks_LH_ContB_PFCd_1",
-    "17Networks_LH_DorsAttnA_SPL_4",
-    "17Networks_LH_SalVentAttnB_Ins_2",
-    "17Networks_RH_VisCent_ExStr_2"
+    "(a1)\n FPN-B PFCd1" = "17Networks_LH_ContB_PFCd_1",
+    "(a2)\n DAN-A SPL4" = "17Networks_LH_DorsAttnA_SPL_4"
+    # "17Networks_LH_SalVentAttnB_Ins_2",
+    # "17Networks_RH_VisCent_ExStr_2"
+  ),
+  tt =  c(
+    "(b1)\n FPN-A PFCd1" = "17Networks_LH_ContA_PFCd_1",
+    "(b2)\n DAN-A SPL7" = "17Networks_LH_DorsAttnA_SPL_7"
+    # "17Networks_LH_DorsAttnB_FEF_2",
+    # "17Networks_RH_ContA_IPS_1"
   ),
   ff =  c(
-    "17Networks_LH_SomMotA_10",
-    "17Networks_LH_LimbicB_OFC_4",
-    "17Networks_RH_SomMotA_5",
-    "17Networks_RH_LimbicB_OFC_6"
+    "(c1)\n SMN-A 10" = "17Networks_LH_SomMotA_10",
+    "(c2)\n Limbic-B OFC4" = "17Networks_LH_LimbicB_OFC_4"
+    # "17Networks_RH_SomMotA_5",
+    # "17Networks_RH_LimbicB_OFC_6"
+  ),
+  tf =  c(
+    "(d1)\n SMN-B Aud1" = "17Networks_LH_SomMotB_Aud_1",
+    "(d2)\n DMN-B IPL2" = "17Networks_LH_DefaultB_IPL_2"
+    # "17Networks_RH_VisCent_ExStr_4",
+    # "17Networks_RH_DefaultA_PFCm_3"
   )
 )
+
 
 th <- list(
   tt = list(
@@ -989,10 +1055,10 @@ th <- list(
         ),
     geom_text(
       data = data.frame(
-        region = "LH_DorsAttnA_SPL_7", trr = -Inf, y = Inf, label = c("univar.", "\nmultiv."),
-        response = c("uv", "rda")
+        nms = "(b2)\n DAN-A SPL7", trr = -Inf, y = Inf, label = c("univar.", "\nmultiv."),
+        response = c("uv", "rda"), stringsAsFactors = FALSE
         ),
-      aes(label = label, y = y), vjust = 1, hjust = 0
+      aes(label = label, y = y), vjust = 1, hjust = 0, size = 4
     )
   ),
   ft = theme(
@@ -1024,19 +1090,22 @@ for (i in seq_along(eg)) {
       data =
         r_summarystat %>%
           filter(region %in% eg[[i]] & session == "baseline") %>%
-          select(region, r, model_nm, response),
+          select(region, r, model_nm, response) %>%
+          mutate(nms = setNames(names(eg[[i]]), eg[[i]])[region]),
       aes(xintercept = r, color = response),
       linetype = "dotted", linewidth = 1
       ) +
     facet_wrap(
-      vars(gsub("17Networks_", "", region)), ncol = 2,
+      vars(nms),
+      #vars(gsub("17Networks_", "", region)),
+      ncol = 2,
       scales = "free_y"
       ) +
     #geom_text(data = response_labs, aes(x = -0.9, y = 6, label = label), size = 5, hjust = 0, fontface = "bold") +
     scale_color_manual(values = colors_response) +
     scale_fill_manual(values = colors_response) +
-    theme(legend.position = "none", strip.text = element_text(size = 6)) +
-    labs(x = "TRR", y = "posterior density") +
+    theme(legend.position = "none", strip.text = element_text(size = 6), axis.title.y = element_blank()) +
+    labs(x = "TRR", y = "posterior density") + #, title = letters[i]
     scale_x_continuous(limits = c(-1, 1), breaks = c(-1, 0, 1)) +
     scale_y_continuous(breaks = 0) +
     th[[names(eg)[i]]]
@@ -1045,9 +1114,56 @@ for (i in seq_along(eg)) {
 
 }
 
-p_densities <- 
+p_densities <-
   (l_density$ft | l_density$tt) /
   (l_density$ff | l_density$tf)
+
+eg_inv <- setNames(c(vapply(eg, names, character(2))), unlist(eg))
+
+p_eg_scatter <- d_tab %>%
+  ggplot(aes(lr, trr_diff, color = is_roi, fill = is_roi)) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0)  +
+  geom_text(
+    data = . %>%
+      mutate(
+        trrsd_response = ifelse(trrsd_response, "multiv. > univar.", "multiv. < univar."),
+        trr_model = ifelse(trr_model, "HBM > ICC", "HBM < ICC")
+        ) %>%
+      group_by(trrsd_response, trr_model) %>%
+      summarise(n = n()) %>%
+      mutate(
+        quad = case_when(
+          trrsd_response == "multiv. < univar." & trr_model == "HBM > ICC" ~ "a",
+          trrsd_response == "multiv. > univar." & trr_model == "HBM > ICC" ~ "b",
+          trrsd_response == "multiv. < univar." & trr_model == "HBM < ICC" ~ "c",
+          trrsd_response == "multiv. > univar." & trr_model == "HBM < ICC" ~ "d"
+          ),
+        lab = quad,
+        #lab = paste0(quad, " (N=", n, ")"),
+        lr = ifelse(trrsd_response == "multiv. > univar.", 1.3, -1.3),
+        hjust = ifelse(trrsd_response == "multiv. > univar.", 1, 0),
+        trr_diff = ifelse(trr_model == "HBM > ICC", 1.5, -1.5),
+        vjust = ifelse(trr_model == "HBM > ICC", 1, 0),
+        is_roi = FALSE
+      ),
+    aes(label = lab, hjust = hjust, vjust = vjust), size = 5
+    #aes(label = paste0(trrsd_response, ", ", trr_model, ": ", n)),
+    ) +
+  geom_point(data = . %>% filter(is_roi == FALSE), shape = 21, size = 1.25) +
+  geom_point(data = . %>% filter(is_roi == TRUE), shape = 21, size = 1.25) +
+  geom_text(
+    data = . %>% filter(region %in% unlist(eg)) %>% mutate(nms = substr(eg_inv[region], 1, 5)),
+    aes(label = nms), size = 2, hjust = 0, vjust = 1, nudge_y = 0.0, nudge_x = 0.0) +
+  scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
+  scale_fill_manual(values = c(`FALSE` = "transparent", `TRUE` = "firebrick")) +
+  scale_x_continuous(limits = c(-1.4, 1.4), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_y_continuous(limits = c(-1.5, 1.5), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "\u0394Precision(TRR), multiv.\u2212univ.\n(log ratio)",
+    y = "\u0394TRR (univar.), HBM-MAP\u2212ICC\n(atanh(r))"
+    ) +
+  theme(legend.position = "none")
 
 p_eg <- (p_eg_scatter + p_densities) + plot_layout(widths = c(1, 1.2))
 
@@ -1056,7 +1172,7 @@ p_eg
 ggsave(
   file.path(path_figs, "trr_eg.pdf"),
   p_eg,
-  dev = cairo_pdf, width = 9, height = 4.5
+  dev = cairo_pdf, width = 9, height = 5, scale = 0.8
   )
 
 ```
@@ -1123,24 +1239,24 @@ s_hbm_posterior_sum <- rbind(s_hbm_posterior_sum, s_hbm_subj_ratio_sum)
 
 p_ratio <-
   s_hbm_posterior_sum[session == "baseline" & variable %in% c("ratio", "trr_sd")] %>%
-  mutate(value = log(value), is_roi = region %in% top_t) %>%
+  mutate(value = log(value), is_roi = region %in% get(params$roi_obj)) %>%
   pivot_wider(names_from = c("variable", "response"), values_from = "value") %>%
   mutate(
     precision_mvuv =  trr_sd_uv - trr_sd_rda,
     variratio_mvuv = ratio_rda - ratio_uv
   ) %>%
-  ggplot(aes(precision_mvuv, variratio_mvuv, color = is_roi, fill = is_roi, group = "")) +
+  ggplot(aes(variratio_mvuv, precision_mvuv, color = is_roi, fill = is_roi, group = "")) +
   geom_hline(yintercept = 0, linetype = "dotted") +
   geom_vline(xintercept = 0, linetype = "dotted")  +
   stat_ellipse(type = "t", linetype = "dotted") +
   geom_abline(slope = -1, linetype = "dotted")  +
-  geom_point(data = . %>% filter(!is_roi), shape = 21, size = 2) +
-  geom_point(data = . %>% filter(is_roi), shape = 21, size = 2) +
+  geom_point(data = . %>% filter(!is_roi), shape = 21, size = 1.25) +
+  geom_point(data = . %>% filter(is_roi), shape = 21, size = 1.25) +
   scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
   scale_fill_manual(values = c(`FALSE` = "transparent", `TRUE` = "firebrick")) +
   labs(
-    x = "\u0394Precision(TRR), multiv.\u2212univ.\n(log ratio)",
-    y = "\u0394Variab. Ratio, multiv.\u2212univ.\n(log ratio)"
+    x = "\u0394Variab. Ratio, multiv.\u2212univ.\n(log ratio)",
+    y = "\u0394Precision(TRR), multiv.\u2212univ.\n(log ratio)"
     ) +
   theme(legend.position = "none") +
   geom_text(
@@ -1154,14 +1270,14 @@ p_ratio <-
         is_roi = FALSE
         ),
     aes(x = 0.5, y = 0.5, label = label),
-  ) +
-  scale_y_continuous(limits = c(-1.4, 1.4)) +
-  scale_x_continuous(limits = c(-1.4, 1.4))
+  )
+  #scale_y_continuous(limits = c(-1.4, 1.4)) +
+  #scale_x_continuous(limits = c(-1.3, 1.3))
 
 ggsave(
   file.path(path_figs, "variability_ratio_vs_precision.pdf"),
   p_ratio,
-  dev = cairo_pdf, width = 4.5, height = 4
+  dev = cairo_pdf, width = 4.5, height = 4, scale = 0.8
   )
 
 p_ratio
