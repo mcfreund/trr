@@ -55,3 +55,5 @@ figs/
 reports/*html
 reports/*.md
 reports/figure
+code/inferential/viz/figure
+code/inferential/viz/*.md
