@@ -107,6 +107,7 @@ file_name <- paste0(
   switch(demean_trial + 1, "", "__demean_trial"),
   "__cv_allsess_wave", do_waves[1], do_waves[2], ".csv"
 )
+file_name_weights <- gsub("^projections", "weights", file_name)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
@@ -130,7 +131,7 @@ behav <- behav[task %in% tasks & session %in% sessions & wave %in% waves, ..cols
 ## utilities ----
 
 ## convenience function for use with klaR::rda()
-ldf <- function(object, newdata, class_names = c("hi", "lo")) {
+ldf <- function(object, newdata, class_names = c("hi", "lo"), return_weights = FALSE) {
   ## class_names: positive class first
   r <- object$regularization
   if (r["lambda"] < 1) stop("Not configured for QDA.")
@@ -139,7 +140,9 @@ ldf <- function(object, newdata, class_names = c("hi", "lo")) {
   sigmahat_reg <- (1 - r["gamma"]) * sigmahat + r["gamma"] * scaled_identity
   w <- solve(sigmahat_reg) %*% (object$means[, class_names] %*% rbind(1, -1))
   w <- w / sqrt(sum(w^2))  ## scale to unit length
-  newdata %*% w
+  res <- newdata %*% w
+  if (return_weights) res <- list(proj = res, w = w)
+  res
 }
 
 
@@ -245,6 +248,7 @@ allres <-
 
 
       projs_all <- mfutils::enlist(sessions)
+      weights_all <- mfutils::enlist(sessions)
       for (test in sessions) {
 
         train <- setdiff(sessions, test)
@@ -254,6 +258,7 @@ allres <-
 
         ## loop over ROIs and train/test models:
         projs <- mfutils::enlist(rois)
+        weights <- mfutils::enlist(rois)
         for (roi_i in seq_along(rois)) {
 
           print(paste("Testing on", task_val, test, "for subject", subj_val, wave_val,
@@ -300,21 +305,23 @@ allres <-
           )
 
           ## test
-          projs_i <- lapply(
+          res_i <- lapply(
             fits,
             function(.x, .newdata) {
               fit_ridge <- .x$ridge
               fit_rda <- .x$rda
               tmp <- predict(fit_ridge, newdata = .newdata, type = "distances")
               res_ridge <- tmp[, "lo"] - tmp[, "hi"]
-              res_rda <- ldf(fit_rda, newdata = .newdata, class_names = c("hi", "lo"))  ## positive, negative
-              return(cbind(ridge = c(res_ridge), rda = c(res_rda)))
+              res_rda <- ldf(fit_rda, newdata = .newdata, class_names = c("hi", "lo"), return_weights = TRUE)  ## positive, negative
+              res <- list(
+                projs = cbind(ridge = c(res_ridge), rda = c(res_rda[["proj"]])),
+                weights = res_rda[["w"]])
+              res
             },
             .newdata = d_test
           )
+          projs_i <- lapply(res_i, "[[", "projs")
           projs_i <- abind(projs_i, rev.along = 0)
-          #image(projs_i[, 1, ])
-          #image(projs_i[, 2, ])
           proj_bar <- rowMeans(projs_i, dims = 2)
 
           ## bind into single dataframe:
@@ -329,19 +336,26 @@ allres <-
               auc_rda = roc(y_test, proj_bar[, "rda"], direction = "<", levels = classes)$auc,
               uv = rowMeans(d_test)  ## univariate projections
               )
+          
+          ## extract weights, aggregate, and save for later analysis:
+          weights_bar <- rowMeans(abind(lapply(res_i, "[[", "weights")))  ## save for later analysis
+          weights[[roi_i]] <- data.table(w = weights_bar)
 
         }
 
         res <- rbindlist(projs, idcol = "roi")
         res[, ":=" (subj = subj_val, task = task_val, wave = wave_val)]  ## add subj/sess info
-
         projs_all[[test]] <- res
 
+        res_weights <- rbindlist(weights, idcol = "roi")
+        res_weights[, ":=" (subj = subj_val, task = task_val, wave = wave_val, vertex = 1:.N)]  ## add subj/sess info
+        weights_all[[test]] <- res_weights
 
       }
 
       result <- rbindlist(projs_all, idcol = "test_session", fill = TRUE)
-      list(result)
+      result_weights <- rbindlist(weights_all, idcol = "test_session", fill = TRUE)
+      list(projs = result, weights = result_weights)
 
     },
 
@@ -358,5 +372,8 @@ allres <-
 }
 stopCluster(cl)
 
-out <- rbindlist(allres)
+out <- rbindlist(allres[names(allres) == "projs"])
 fwrite(out, here("out", "spatial", file_name))
+
+out_weights <- rbindlist(allres[names(allres) == "weights"])
+fwrite(out_weights, here("out", "spatial", file_name_weights))
