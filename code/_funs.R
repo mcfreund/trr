@@ -299,9 +299,9 @@ read_summarize_hbm <- function(
 }
 add_names_and_bind <- function(res, .l) {
   for (i in seq_along(res)) {
-    res[[i]] <- cbind(res[[i]], .l[i, ])
+    res[[i]] <- as.data.table(cbind(res[[i]], .l[i, ]))
   }
-  bind_rows(res)
+  rbindlist(res)
 }
 future_pmap_bind <- function(.x, .f, ...) add_names_and_bind(future_pmap(.x, .f, ...), .x)
 
