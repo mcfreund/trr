@@ -60,30 +60,6 @@ theme_update(
   )
 axis_text_x_angle <- 30
 
-legend_network8 <- data.frame(
-  network = c("Cont", "Default", "DorsAttn", "SalVentAttn", "SomMot", "Temp", "Vis", "Limbic"),
-  color = c(qualitative_hcl(7, palette = "Dark 3"), "grey50"),
-  label = c(
-    "Cont", "\nDefault", "\n\nDorsAttn", "\n\n\nSalVentAttn", "\n\n\n\nSomMot", "\n\n\n\n\nTemp", "\n\n\n\n\n\nVis",
-    "\n\n\n\n\n\n\nLimbic"
-    ),
-    stringsAsFactors = FALSE
-)
-colors_network8 <- setNames(legend_network8$color, legend_network8$network)
-colors_response <- setNames(diverging_hcl(10, palette = "Purple-Brown")[c(2, 9)], c("rda", "uv"))
-colors_models <- c(summarystat = "grey40", no_lscov_symm = "firebrick")
-colors_nois <- c(
-  ContA = "firebrick", ContB = "firebrick", DorsAttnA = "firebrick",
-  DorsAttnB = "firebrick", other = "grey60"
-  )
-example_rois <- c(
-    "17Networks_LH_ContA_PFCl_2",
-    "17Networks_LH_ContA_IPS_4"
-  )
-example_roi_names <- c(
-  `17Networks_LH_ContA_PFCl_2` = "left PFCl_2",
-  `17Networks_LH_ContA_IPS_4` = "left IPS_4"
-  )
 
 ## other constants, paths, etc...
 
