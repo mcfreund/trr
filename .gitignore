@@ -54,3 +54,5 @@ scratch/
 figs/
 reports/*html
 figure/
+
+trr.code-workspace

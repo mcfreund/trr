@@ -1,4 +1,5 @@
 linters: linters_with_defaults(
   line_length_linter = line_length_linter(120),
-  indentation_linter = indentation_linter(assignment_as_infix = TRUE),
+  indentation_linter = indentation_linter(hanging_indent_style = "tidy", indent = 2L, assignment_as_infix = TRUE),
+  trailing_whitespace_linter(allow_empty_lines = TRUE, allow_in_strings = TRUE),
   commented_code_linter = NULL)
