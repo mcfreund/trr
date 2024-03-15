@@ -17,11 +17,30 @@ source(here("code", "_paths.R"))
 
 ## misc parameters ----
 
-n_cores <- 8
-plan(multicore, workers = n_cores)
+do_debug <- FALSE
 
-path_summary <- here("out", "inferential", atlas_nm)
+n_cores <- 10
+if (do_debug) {
+  plan(sequential, split = TRUE)
+} else {
+  plan(multicore, workers = n_cores)
+}
 
+## flags for saving different info:
+
+do_summary_stats <- TRUE
+do_hbm_posteriors <- TRUE
+do_hbm_criteria <- TRUE
+
+## posterior summary functions to use / data types to save:
+
+posterior_stats <- list(
+  popef = extract_popef,
+  trr = extract_trr,
+  ratio = extract_ratio
+)
+
+## parameters
 model_info <- rbind(
   ## all models for core32 parcels:
   CJ(model_nm = models_hbm, response = responses, roi_nm = core32_nms, session = "baseline"),
@@ -29,19 +48,6 @@ model_info <- rbind(
   CJ(model_nm = "no_lscov_symm", response = responses, roi_nm = rois[!rois %in% core32_nms], session = "baseline")
 )
 
-## flags for saving different files:
-
-do_summary_stats <- FALSE
-do_hbm_posteriors <- TRUE
-do_hbm_criteria <- FALSE
-
-## posterior summary functions to use:
-
-posterior_stats <- list(
-  popef = extract_popef,
-  trr = extract_trr,
-  ratio = extract_ratio
-)
 
 
 ## Summary statistic reliability models ----
@@ -92,9 +98,9 @@ if (do_summary_stats) {
 
   ## save
 
-  fwrite(d_summarystat_subj, file.path(path_summary, "summarystat_subj_means.csv"))
-  fwrite(d_summarystat_popef, file.path(path_summary, "summarystat_popef.csv"))
-  fwrite(d_summarystat_trr, file.path(path_summary, "summarystat_trr.csv"))
+  fwrite(d_summarystat_subj, file.path(path_reliab, "summarystat_subj_means.csv"))
+  fwrite(d_summarystat_popef, file.path(path_reliab, "summarystat_popef.csv"))
+  fwrite(d_summarystat_trr, file.path(path_reliab, "summarystat_trr.csv"))
 
 }
 
@@ -111,7 +117,7 @@ if (do_hbm_criteria) {
     sum_fun = pull_criteria
   )
   criteria <- reformat_for_downstream_analyses(criteria)
-  fwrite(criteria, file.path(path_summary, "fit_criteria.csv"))
+  fwrite(criteria, file.path(path_reliab, "fit_criteria.csv"))
 
 }
 
@@ -136,10 +142,10 @@ if (do_hbm_posteriors) {
     summaries <- summarize_posteriors(samples)
 
     ## save to disk:
-    saveRDS(samples, file.path(path_summary, paste0("posterior_samples_", names(posterior_stats)[statistic_i], ".RDS")))
+    saveRDS(samples, file.path(path_reliab, paste0("posterior_samples_", names(posterior_stats)[statistic_i], ".RDS")))
     saveRDS(
       summaries,
-      file.path(path_summary, paste0("posterior_summaries_", names(posterior_stats)[statistic_i], ".RDS"))
+      file.path(path_reliab, paste0("posterior_summaries_", names(posterior_stats)[statistic_i], ".RDS"))
     )
 
     ## restore memory:

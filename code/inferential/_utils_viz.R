@@ -1,6 +1,5 @@
 library(ggplot2)
 
-
 arsinh <- scales::trans_new("arsinh", transform = function(x) asinh(x), inverse = function(x) sinh(x))
 
 
@@ -207,4 +206,12 @@ create_icc_scatter <- function(data, uv_col, rda_col, dprime_col, highlight_over
     coord_cartesian(xlim = c(-0.5, 1), ylim = c(-0.5, 1))
 
   return(p_icc_scatter)
+}
+
+
+
+label_regions <- function(labels, width = 18) {
+  labels <- gsub("17Networks_", "", labels) %>% gsub("_", " ", .)
+  labels <- stringr::str_wrap(labels, width = width)
+  return(labels)
 }

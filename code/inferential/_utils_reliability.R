@@ -1,3 +1,4 @@
+library(dplyr)
 library(data.table)
 library(furrr)
 library(brms)
@@ -27,7 +28,7 @@ get_network <- function(x, get_8 = FALSE) {
 
 
 read_summarize_hbm <- function(model_nm, response, session, base_path, atlas_nm, roi_nm, sum_fun = identity, ...) {
-  source(here("code", "inferential", "_parameters_reliability.R"))
+  source(here::here("code", "inferential", "_parameters_reliability.R"))
   
   file_name <- paste0(get_model_info(model_nm, response, session)$model_prefix, ".rds")
   full_path <- file.path(base_path, atlas_nm, roi_nm, file_name)
@@ -107,12 +108,12 @@ extract_ratio <- function(mdl) {
   sigma_stroop2 <- sqrt(mfutils::Var(stroop2, 1))
   sigma_stroop <- (sigma_stroop1 + sigma_stroop2) / 2
   sigma_resid <- hypothesis(mdl, hyp)$samples$H1
-  ratio <- sigma_resid / sigma_stroop
+  ratio <- log(sigma_resid / sigma_stroop)
 
   d <- data.table(
     sigma_resid = sigma_resid,
     sigma_stroop = sigma_stroop,
-    ratio = sigma_resid / sigma_stroop,
+    ratio = ratio,
     resample_idx = seq_along(ratio)
   )
 
@@ -128,7 +129,7 @@ pull_criteria <- function(mdl, criteria_nms = c("loo", "waic")) {
 
 
 summarize_posterior_ <- function(x, sum_funs) {
-  lapply(sum_funs, \(f, samples = x) f(samples))
+  map_dbl(sum_funs, \(f, samples = x) f(samples))
 }
 
 
@@ -146,6 +147,13 @@ vec2draws <- function(x, n_chains = 4) {
 
   x
 
+}
+
+
+reformat_for_downstream_analyses <- function(x) {
+  x %>%
+    rename(region = "roi_nm") %>% ## ggseg plotting functions expect this
+    mutate(network = get_network(region))
 }
 
 
@@ -172,7 +180,6 @@ summarize_posteriors <- function(
   by = c("statistic", "model_nm", "response", "region", "session")
 ) {
   source(here::here("code", "inferential", "_parameters_reliability.R"))
-
   data[,
     list(value = summarize_posterior_(value, sum_funs), sum_fun = names(sum_funs)),
     by = c("statistic", "model_nm", "response", "region", "session")]
@@ -180,8 +187,57 @@ summarize_posteriors <- function(
 }
 
 
-reformat_for_downstream_analyses <- function(x) {
-  x %>%
-    rename(region = "roi_nm") %>% ## ggseg plotting functions expect this
-    mutate(network = get_network(region))
+load_summaries <- function(
+  data_type, prefixes,
+  path = path_reliab,
+  read_fun = NULL,
+  sum_fun = I,
+  ...
+) {
+  source(here::here("code", "_paths.R"))
+  
+  # Determine the file extension based on data_type
+  ext <- switch(
+    data_type,
+    "posterior_samples" = ".RDS",
+    "posterior_summaries" = ".RDS",
+    "summarystat" = ".csv",
+    stop("Unsupported data type")
+  )
+  
+  file_names <- paste0(data_type, "_", prefixes, ext)
+  
+  # Set default read_fun based on file extension
+  if (is.null(read_fun)) {
+    read_fun <- switch(
+      ext,
+      ".RDS" = readRDS,
+      ".csv" = data.table::fread,
+      stop("Unsupported file extension")
+    )
+  }
+  
+  map(
+    setNames(file.path(path, file_names), prefixes),
+    ...,
+    \(fn, ...) {
+      x <- read_fun(fn)
+      sum_fun(x, ...)
+    }
+  )
+
+}
+
+
+subset_and_order <- function(x, regions, session, models_order = models_hbm) {
+  source(here::here("code", "inferential", "_parameters_reliability.R"))
+  # subset:
+  x_sub <- x[region %in% regions & session == .S, env = list(.S = I(session))]
+  ## order factor cols for plotting:
+  if (!is.null(models_order)) {
+    x_sub[, model_nm := factor(model_nm, levels = models_order)]
+  }
+
+  x_sub
+
 }

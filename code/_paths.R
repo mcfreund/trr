@@ -1,13 +1,15 @@
 ## paths
+source(here::here("code", "_atlas.R"))
 
-nodename <- Sys.info()["nodename"]
-
-if (nodename == "puter2") {
+if (Sys.info()["nodename"] == "puter2") {
 
   path_out <- "/mnt/d/trr_data/"
 
-} else if (nodename == "CCPLINUX1") {
+} else if (Sys.info()["nodename"] == "CCPLINUX1") {
 
   path_out <- "/data/nil-external/ccp/chenr/trr/out"
 
 }
+
+path_reliab <- here("out", "inferential", atlas_nm)
+path_figs <- here::here("figs")

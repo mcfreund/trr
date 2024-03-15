@@ -57,6 +57,8 @@ theme_surface <- function(
 }
 
 
+theme_set(theme_default())
+
 ## labels
 
 legend_network8 <- data.frame(
@@ -106,3 +108,23 @@ example_roi_names <- c(
 rois <- mfutils::schaefer2018_17_400_fsaverage5$key[["parcel"]]
 atlas <- ggsegSchaefer::schaefer17_400
 atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
+
+
+## posterior stats
+
+stat_names <- c(
+  Mean = "mean", Median = "median", MAP = "map",
+  `Lower 95% CI` = "hdi95_lower",
+  `Upper CI 95` = "hdi95_upper",
+  `Lower CI 89` = "hdi89_lower",
+  `Upper CI 89` = "hdi89_upper",
+  SD = "sd",
+  IQR = "iqr",
+  MAD = "mad",
+  `95%ile` = "q95",
+  `10%ile` = "q10",
+  `5%ile` = "q05",
+  rhat = "rhat",
+  `Bulk ESS` = "ess_bulk",
+  `Tail ESS` = "ess_tail"
+)
