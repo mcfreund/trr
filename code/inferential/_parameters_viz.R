@@ -81,13 +81,12 @@ colors_models2 <- c(summarystat = "grey40", no_lscov_symm = "firebrick")
 colors_models <- setNames(
   sequential_hcl(5, palette = "Purple-Blue"),
   c("full", "no_lscov", "no_lscov_symm", "fixed_sigma", "summarystat"))
+colors_models_comparison <- c(no_lscov_symm = "#D306CD", summarystat = "#21D1FE")
 colors_roi <- c("TRUE" = "firebrick", "FALSE" = "grey60")
 colors_nois <- c(
   ContA = "firebrick", ContB = "firebrick", DorsAttnA = "firebrick",
   DorsAttnB = "firebrick", other = "grey60"
 )
-
-
 ## sizes
 axis_text_x_angle <- 30
 size_line_roi <- c("TRUE" = 0.275, "FALSE" = 0.2)
@@ -108,7 +107,7 @@ example_roi_names <- c(
 rois <- mfutils::schaefer2018_17_400_fsaverage5$key[["parcel"]]
 atlas <- ggsegSchaefer::schaefer17_400
 atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
-
+n_bins_rois <- round(1 + log2(length(rois)))
 
 ## posterior stats
 
@@ -128,3 +127,6 @@ stat_names <- c(
   `Bulk ESS` = "ess_bulk",
   `Tail ESS` = "ess_tail"
 )
+
+
+## 

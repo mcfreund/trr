@@ -26,8 +26,6 @@ session <- "baseline"
 n_core <- 4
 plan(multicore, workers = n_core)
 
-text_axis_x_size <- 7
-
 dir.create(file.path(path_figs, "model_comparison", "supp"), showWarnings = FALSE, recursive = FALSE)
 
 ## read and subset data
@@ -174,7 +172,7 @@ for (res in responses) {
     theme(legend.position = c(0.7, 0.07), legend.direction = "horizontal", axis.text.x = element_blank()) +
     facet_wrap(vars(region), labeller = as_labeller(label_regions)) +
     labs(title = res_lab, x = element_blank(), y = "SE(Pop.-Level Stroop Effect)", fill = "models") +
-    theme(strip.text = element_text(size = 6), legend.text = element_text(size = text_axis_x_size))
+    theme(strip.text = element_text(size = 6), legend.text = element_text(size = 7))
 }
 
 # Line plot
@@ -186,7 +184,7 @@ p_pop_box_se <-
   theme(legend.position = "none") +
   scale_x_discrete(labels = models_hbm_vals2nms) +
   labs(x = "Model", y = "SE(Pop.-Level Stroop Effect)") +
-  theme(legend.position = "none", axis.text.x = element_text(size = text_axis_x_size)) +
+  theme(legend.position = "none", axis.text.x = element_text(size = 7)) +
   facet_wrap(
     vars(response),
     labeller = labeller(response = c(uv = "Univariate", rda = "Multivariate")),

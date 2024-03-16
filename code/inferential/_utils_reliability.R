@@ -3,11 +3,6 @@ library(data.table)
 library(furrr)
 library(brms)
 
-# max_aposteriori <- function(x) {
-#   d <- density(x)
-#   d$x[which.max(d$y)]
-# }
-
 
 add_names_and_bind <- function(res, .l) {
   for (i in seq_along(res)) {
@@ -182,7 +177,7 @@ summarize_posteriors <- function(
   source(here::here("code", "inferential", "_parameters_reliability.R"))
   data[,
     list(value = summarize_posterior_(value, sum_funs), sum_fun = names(sum_funs)),
-    by = c("statistic", "model_nm", "response", "region", "session")]
+    by = c("statistic", "model_nm", "response", "region", "session", "network")]
 
 }
 
@@ -229,15 +224,21 @@ load_summaries <- function(
 }
 
 
-subset_and_order <- function(x, regions, session, models_order = models_hbm) {
+subset_and_order <- function(x, regions = rois, sessions = "baseline", models_order = models_hbm) {
+  source(here::here("code", "_atlas.R"))
   source(here::here("code", "inferential", "_parameters_reliability.R"))
-  # subset:
-  x_sub <- x[region %in% regions & session == .S, env = list(.S = I(session))]
-  ## order factor cols for plotting:
-  if (!is.null(models_order)) {
-    x_sub[, model_nm := factor(model_nm, levels = models_order)]
-  }
 
-  x_sub
+  if (!is.null(regions)) {
+    x <- x[region %in% regions]
+  }
+  if (!is.null(sessions)) {
+    x <- x[session %in% sessions]
+  }
+  if (!is.null(models_order)) {
+    x <- x[model_nm %in% models_order]
+    x[, model_nm := factor(model_nm, levels = models_order)]  ## order factor cols for plotting
+  }
+  
+  x
 
 }

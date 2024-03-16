@@ -33,7 +33,7 @@ plot_surface <- function(
   border_color_values = color_line_roi,
   border_size_col = "is_roi",
   border_size_values = size_line_roi,
-  alpha_col = "alpha",
+  alpha_col = "alpha_roi",
   position = ggseg::position_brain(. ~ hemi + side),
   underlay = c(color = "grey", fill = "grey"),
   atlas_data = atlas,
@@ -182,7 +182,12 @@ create_icc_scatter <- function(data, uv_col, rda_col, dprime_col, highlight_over
     geom_point(
       aes(
         color = .data[[dprime_col]],
-        alpha = highlight_overlay(.data[[dprime_col]], upper = quantile(.data[[dprime_col]], 0.9), lower = min(.data[[dprime_col]]), lower_alpha = 0.5)
+        alpha = highlight_overlay(
+          .data[[dprime_col]],
+          upper = quantile(.data[[dprime_col]], 0.9),
+          lower = min(.data[[dprime_col]]),
+          lower_alpha = 0.5
+        )
       ),
       stroke = 0, size = 1
     ) +
@@ -214,4 +219,145 @@ label_regions <- function(labels, width = 18) {
   labels <- gsub("17Networks_", "", labels) %>% gsub("_", " ", .)
   labels <- stringr::str_wrap(labels, width = width)
   return(labels)
+}
+
+
+
+plot_hist_means <- function(
+  data, value_col, fill_col, text_label, colors,
+  alpha_level = 0.5,
+  n_bins = 10,
+  text_y = c(125, 75),
+  text_x = c(-2/3, -2/3),
+  text_size = 4,
+  x_lab = "statistic",
+  y_lab = "Number of parcels"
+) {
+  
+  ## create object to hold colored text labels
+  text_data <- data.frame(label = names(text_label), y = text_y)
+  text_data[[value_col]] <- text_x
+  text_data[[fill_col]]  <- text_label
+
+  data %>%
+    ggplot(aes(.data[[value_col]], fill = .data[[fill_col]])) +
+    geom_histogram(position = "identity", alpha = alpha_level, color = "black", bins = n_bins) +
+    geom_text(data = text_data, aes(y = y, label = label, color = .data[[fill_col]]), size = text_size) +
+    scale_fill_manual(values = colors) +
+    scale_color_manual(values = colors) +
+    labs(x = x_lab, y = y_lab) +
+    theme(legend.position = "none")
+
+}
+
+
+
+plot_hist_diff <- function(
+  data, id_cols, names_from_col, values_from_col, contrast,
+  fill_col = "is_roi",
+  text_label = c("'ROIs'" = TRUE, "all parcels" = FALSE),
+  colors = colors_roi,
+  text_x = c(-1, -1),
+  text_y = c(50, 70),
+  text_size = 4,
+  n_bins = 10,
+  x_breaks = c(-1, 0, 1),
+  x_lab = "statistic",
+  y_lab = "Number of parcels"
+) {
+  source(here::here("code", "inferential", "_parameters_viz.R"))
+  
+  ## compute contrast:
+  data <- data %>%
+    pivot_wider(id_cols = id_cols, names_from = names_from_col, values_from = values_from_col) %>%
+    mutate(difference := {{ contrast }})
+
+  ## create object to hold colored text labels
+  text_data <- data.frame(label = names(text_label), y = text_y)
+  text_data$difference <- text_x
+  text_data[[fill_col]]  <- text_label
+
+  data %>%
+    ggplot(aes(difference, fill = .data[[fill_col]], color = .data[[fill_col]])) +
+    geom_histogram(position = "identity", fill = colors[["FALSE"]], color = "black", bins = n_bins) +
+    geom_histogram(
+      data = . %>% filter(.data[[fill_col]]),
+      fill = colors[["TRUE"]],
+      color = "black",
+      position = "identity",
+      bins = n_bins
+    ) +
+    geom_text(data = text_data, aes(y = y, label = label), size = text_size) +
+    scale_color_manual(values = colors) +
+    scale_x_continuous(breaks = x_breaks) +
+    labs(x = x_lab, y = y_lab) +
+    theme(legend.position = "none")
+
+}
+
+
+
+
+plot_scatter <- function(
+  data, x_col, y_col,
+  color_col = "dprime",
+  linetype = "dashed",
+  alpha_level = 0.75,
+  point_size = 1,
+  breaks = c(-1, 0, 1),
+  x_lab = "statistic",
+  y_lab = "Number of parcels",
+  color_lab = "d'",
+  scale_color = colorspace::scale_color_continuous_diverging("Blue-Red 3", breaks = c(-7, 0, 7))
+) {
+  source(here::here("code", "inferential", "_parameters_viz.R"))
+  
+  data %>%
+    ## sort by color col to control plotting order of points
+    arrange({{ color_col }}) %>%
+    ggplot(aes(.data[[x_col]], .data[[y_col]])) +
+    geom_abline(linetype = linetype) +
+    geom_vline(xintercept = 0, linetype = linetype) +
+    geom_hline(yintercept = 0, linetype = linetype) +
+    geom_point(aes(color = .data[[color_col]]), alpha = alpha_level, stroke = 0, size = point_size) +
+    scale_color +
+    theme(
+      axis.line.x.bottom = element_blank(),
+      axis.line.y.left = element_blank(),
+      legend.position = c(1, 0.75),
+      legend.key.width = unit(1 / 16, "cm"),
+      legend.key.height = unit(1 / 6, "cm"),
+      legend.text = element_text(size = 6),
+      legend.title = element_text(size = 6),
+    ) +
+    labs(x = x_lab, y = y_lab, color = color_lab) +
+    scale_x_continuous(breaks = breaks) +
+    scale_y_continuous(breaks = breaks)
+
+}
+
+
+arrange_plots <- function(
+  brains, means, diff, scatter,
+  plot_layout = c(
+    patchwork::area(t = 0, b = 65, l = 0, r = 220),
+    patchwork::area(t = 66, b = 100, l = 20, r = 200)
+  ),
+  filename = NULL,
+  path = NULL,
+  width = 8,
+  height = 4.5,
+  dev = cairo_pdf,
+  ...
+) {
+
+  comparison <- means + diff + scatter
+  p <- (patchwork::free(brains) / comparison) + patchwork::plot_layout(design = plot_layout)
+
+  if (!is.null(filename) && !is.null(path)) {
+    ggsave(file.path(path, paste0(filename, ".pdf")), p, dev = cairo_pdf, height = height, width = width, ...)
+  }
+
+  p
+
 }
