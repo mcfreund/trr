@@ -108,6 +108,8 @@ file_name <- paste0(
   "__cv_allsess_wave", do_waves[1], do_waves[2], ".csv"
 )
 file_name_weights <- gsub("^projections", "weights", file_name)
+file_name_noise_proj <- gsub("^projections", "noise_proj", file_name)
+file_name_noise_proj <- gsub("csv$", "RDS", file_name_noise_proj)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
@@ -143,6 +145,43 @@ ldf <- function(object, newdata, class_names = c("hi", "lo"), return_weights = F
   res <- newdata %*% w
   if (return_weights) res <- list(proj = res, w = w)
   res
+}
+
+
+get_noise_projections <- function(weights_multiv, test_data) {
+
+  n_vertex <- ncol(d_test)
+  w <- cbind(univar = rep(1/n_vertex, n_vertex), multiv = c(weights_multiv))
+
+  ## get noise variance
+
+  ## regress signal:
+  class_labels <- rownames(test_data)
+  is_good_trial <- complete.cases(test_data)
+  mu <- average(t(test_data[is_good_trial, ]), class_labels[is_good_trial])
+  mu_expand <- tcrossprod(indicator(class_labels), mu)  ## expand to match dims of (non-subsetted) data
+  test_data_c <- test_data - mu_expand  ## center
+  ## find principal directions:
+  pca <- prcomp(test_data[is_good_trial, ])
+
+  ## apply
+
+  proj_scaled <- crossprod(w, pca$rotation)
+  proj_relvar <- crossprod(w, pca$rotation %*% diag(pca$sd^2)) / sum(pca$sd^2)
+  var_total <- sum(pca$sd^2)
+  weights_cossim <- crossprod(mfutils::scale2unit(w))[1, 2]
+
+  ## arrange and return
+
+  projs <- cbind(t(proj_scaled), t(proj_relvar), seq_len(n_vertex), var_total, weights_cossim)
+  colnames(projs) <- c(
+      "proj_uv_scaled", "proj_rda_scaled", "proj_uv_relvar", "proj_mv_relvar", "dimension",
+      "var_total", "weights_cossim"
+      )
+  projs <- as.data.table(projs)
+
+  projs
+
 }
 
 
@@ -249,6 +288,7 @@ allres <-
 
       projs_all <- mfutils::enlist(sessions)
       weights_all <- mfutils::enlist(sessions)
+      noise_proj_all <- mfutils::enlist(sessions)
       for (test in sessions) {
 
         train <- setdiff(sessions, test)
@@ -259,6 +299,7 @@ allres <-
         ## loop over ROIs and train/test models:
         projs <- mfutils::enlist(rois)
         weights <- mfutils::enlist(rois)
+        noise_projs <- mfutils::enlist(rois)
         for (roi_i in seq_along(rois)) {
 
           print(paste("Testing on", task_val, test, "for subject", subj_val, wave_val,
@@ -341,6 +382,14 @@ allres <-
           weights_bar <- rowMeans(abind(lapply(res_i, "[[", "weights")))  ## save for later analysis
           weights[[roi_i]] <- data.table(w = weights_bar)
 
+          ## project noise dimensions onto univariate and multivariate weights:
+          noise_projs_i <- lapply(
+            res_i,
+            function(x, data_test) get_noise_projections(x$weights, data_test),
+            data_test = d_test
+          )
+          noise_projs[[roi_i]] <- rbindlist(noise_projs_i, id = "resample_idx")
+
         }
 
         res <- rbindlist(projs, idcol = "roi")
@@ -351,11 +400,16 @@ allres <-
         res_weights[, ":=" (subj = subj_val, task = task_val, wave = wave_val, vertex = 1:.N)]  ## add subj/sess info
         weights_all[[test]] <- res_weights
 
+        res_noise_proj <- rbindlist(noise_proj, idcol = "roi")
+        res_noise_proj[, ":=" (subj = subj_val, task = task_val, wave = wave_val, vertex = 1:.N)]  ## add subj/sess info
+        noise_proj_all[[test]] <- res_noise_proj
+
       }
 
       result <- rbindlist(projs_all, idcol = "test_session", fill = TRUE)
       result_weights <- rbindlist(weights_all, idcol = "test_session", fill = TRUE)
-      list(projs = result, weights = result_weights)
+      result_noise_proj <- rbindlist(noise_proj_all, idcol = "test_session", fill = TRUE)
+      list(projs = result, weights = result_weights, noise_proj = result_noise_proj)
 
     },
 
@@ -377,3 +431,6 @@ fwrite(out, here("out", "spatial", file_name))
 
 out_weights <- rbindlist(allres[names(allres) == "weights"])
 fwrite(out_weights, here("out", "spatial", file_name_weights))
+
+out_noise_proj <- rbindlist(allres[names(allres) == "noise_proj"])
+saveRDS(out_noise_proj, here("out", "spatial", file_name_noise_proj))
