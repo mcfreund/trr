@@ -22,7 +22,7 @@ library(mfutils)
 # )
 
 theme_default <- function(
-  base_size = 12, base_family = "",
+  base_size = 10, base_family = "",
   base_line_size = base_size / 22,
   base_rect_size = base_size / 22,
   ...
@@ -33,14 +33,16 @@ theme_default <- function(
       axis.line.y.left = element_line(),
       axis.line.x.bottom = element_line(),
       axis.ticks = element_line(),
-      panel.grid = element_blank()
+      panel.grid = element_blank(),
+      plot.subtitle = element_text(size = rel(1), hjust = 0),
+      plot.title = element_text(size = rel(1), hjust = 0)
     ) +
     theme(...)
 }
 
 
 theme_surface <- function(
-  base_size = 12, base_family = "",
+  base_size = 8, base_family = "",
   base_line_size = base_size / 22,
   base_rect_size = base_size / 22,
   ...
@@ -48,10 +50,15 @@ theme_surface <- function(
   theme_minimal(base_size = base_size, base_family, base_line_size, base_rect_size) %+replace%
     theme(
       axis.text = element_blank(), panel.grid = element_blank(), panel.border = element_blank(),
-      axis.ticks = element_blank(), legend.position = c(0.5, 0.5), legend.title = element_text(size = 7),
-      legend.background = element_blank(), legend.text = element_text(size = 7), legend.direction = "horizontal",
+      axis.ticks = element_blank(),
+      legend.position = c(0.5, 0.5),
+      legend.title = element_text(size = 7),
+      legend.background = element_blank(),
+      legend.text = element_text(size = 7),
+      legend.direction = "horizontal",
       legend.key.height = unit(1 / 8, "cm"),
-      legend.key.width = unit(1 / 3, "cm")
+      legend.key.width = unit(1 / 3, "cm"),
+      plot.margin = unit(c(0, 0, 0, 0), "mm")
     ) +
     theme(...)
 }
@@ -129,4 +136,17 @@ stat_names <- c(
 )
 
 
-## 
+## components of main figures
+
+margins <- c(6, 6, 6, 6)
+
+titles <- c(
+  uv = bquote(
+    "summary-statistic versus hierarchical-bayes estimates of" ~ bold("test-retest reliability") ~ 
+    "in" ~ bold("univariate") ~ "stroop contrasts"
+    ),
+  rda = bquote(
+    "summary-statistic versus hierarchical-bayes estimates of" ~ bold("test-retest reliability") ~ 
+    "in" ~ bold("multivariate") ~ "stroop contrasts"
+    )
+  )

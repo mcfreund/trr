@@ -1,4 +1,6 @@
 library(ggplot2)
+library(dplyr)
+library(rlang)
 
 arsinh <- scales::trans_new("arsinh", transform = function(x) asinh(x), inverse = function(x) sinh(x))
 
@@ -25,20 +27,27 @@ highlight_overlay <- function(
 }
 
 
+label_regions <- function(labels, width = 18) {
+  labels <- gsub("17Networks_", "", labels) %>% gsub("_", " ", .)
+  labels <- stringr::str_wrap(labels, width = width)
+  return(labels)
+}
+label_regions_eg <- \(x) paste0("q", 1:4, "\n", label_regions(eg))
+
+
 
 plot_surface <- function(
   data,
   statistic_col,
   border_color_col = "is_roi",
+  border_size_col = border_color_col,
   border_color_values = color_line_roi,
-  border_size_col = "is_roi",
   border_size_values = size_line_roi,
-  alpha_col = "alpha_roi",
+  alpha_col = "alpha_level",
   position = ggseg::position_brain(. ~ hemi + side),
   underlay = c(color = "grey", fill = "grey"),
   atlas_data = atlas,
   scale_fill = \(...) scale_fill_viridis_c(option = "magma", na.value = "white", ...),
-  scale_fill_breaks = NULL,
   theme_ = theme_surface(),
   guides_ = guides(
     fill = guide_colorbar(title.position = "left", title.vjust = 0.9),
@@ -83,142 +92,10 @@ plot_surface <- function(
   }
 
   ## scales, guides, themes
-  if (is.null(scale_fill_breaks)) {
-    p <- p + scale_fill()
-  } else {
-    p <- p + scale_fill(breaks = scale_fill_breaks)
-  }
-  p <- p + guides_ + theme_
+  p <- p + scale_fill(...) + guides_ + theme_
 
   p
 
-}
-
-
-# plot_parcel_stats <- function(
-#   data, statistic_col, color_col, color_values, id_vars,
-#   n_bins = 10,
-#   hist_means_axis_titles = c(x = "ICC(Stroop) (r)", y = "Number of parcels")
-#   hist_diff_axis_titles = c(x = "ICC(Stroop) (r)", y = "Number of parcels")
-# ) {
-
-  
-#   p_hist_means <- data %>%
-#     ggplot(aes(.data[[statistic_col]], fill = .data[[color_col]])) +
-#     geom_histogram(position = "identity", alpha = 0.5, color = "black", bins = n_bins) +
-#     scale_fill_manual(values = color_values) +
-#     labs(x = hist_means_axis_titles[["x"]], y = hist_means_axis_titles[["y"]]) +
-#     theme(legend.position = "none") +
-#     ## TODO: convert to geomtext:
-#     annotate("text", y = 75, x = -0.3, label = "univar.", color = color_values[["uv"]]) +
-#     annotate("text", y = 75, x = 0.75, label = "multiv.", color = color_values[["rda"]])
-
-#   # p_icc_hist_diff <- data %>%
-#   #   pivot_wider(
-#   #     id_cols = c("region", "is_roi", "alpha", "dprime", "p_plus"),
-#   #     names_from = "response", values_from = "r"
-#   #   ) %>%
-#   #   mutate(difference = atanh(rda - uv)) %>%
-#   #   ggplot(aes(difference)) +
-#   #   geom_histogram(position = "identity", fill = colors_roi[["FALSE"]], color = "black", bins = n_bins) +
-#   #   geom_histogram(
-#   #     data = . %>% filter(is_roi),
-#   #     position = "identity", fill = colors_roi[["TRUE"]], color = "black", bins = n_bins) +
-#   #   scale_x_continuous(breaks = c(-1, 0, 1)) +
-#   #   annotate("text", y = 100, x = -0.8, label = "all", color = colors_roi[["FALSE"]]) +
-#   #   annotate("text", y = 50, x = -0.8, label = "'ROI'", color = colors_roi[["TRUE"]]) +
-#   #   labs(
-#   #     x = "\u0394ICC(Stroop):\nmultiv. \u2212 univar. (z)",
-#   #     y = "Number of parcels"
-#   #   )
-
-
-
-# }
-
-
-create_icc_hist_means <- function(data, response_col, r_col, n_bins, colors_response, x_label, y_label) {
-  p_icc_hist_means <- data %>%
-    ggplot(aes(.data[[r_col]], fill = .data[[response_col]])) +
-    geom_histogram(position = "identity", alpha = 0.5, color = "black", bins = n_bins) +
-    scale_fill_manual(values = colors_response) +
-    labs(
-      x = x_label,
-      y = y_label
-    ) +
-    theme(legend.position = "none") +
-    annotate("text", y = 75, x = -0.3, label = "univar.", color = colors_response[["uv"]]) +
-    annotate("text", y = 75, x = 0.75, label = "multiv.", color = colors_response[["rda"]])
-
-  return(p_icc_hist_means)
-}
-
-create_icc_hist_diff <- function(data, difference_col, is_roi_col, n_bins, colors_roi, x_label, y_label) {
-  p_icc_hist_diff <- data %>%
-    ggplot(aes(.data[[difference_col]])) +
-    geom_histogram(position = "identity", fill = colors_roi[["FALSE"]], color = "black", bins = n_bins) +
-    geom_histogram(
-      data = . %>% filter(.data[[is_roi_col]]),
-      position = "identity", fill = colors_roi[["TRUE"]], color = "black", bins = n_bins
-    ) +
-    scale_x_continuous(breaks = c(-1, 0, 1)) +
-    annotate("text", y = 100, x = -0.8, label = "all", color = colors_roi[["FALSE"]]) +
-    annotate("text", y = 50, x = -0.8, label = "'ROI'", color = colors_roi[["TRUE"]]) +
-    labs(
-      x = x_label,
-      y = y_label
-    )
-
-  return(p_icc_hist_diff)
-}
-
-create_icc_scatter <- function(data, uv_col, rda_col, dprime_col, highlight_overlay, x_label, y_label, color_label) {
-  p_icc_scatter <- data %>%
-    arrange(.data[[dprime_col]]) %>%
-    ggplot(aes(.data[[uv_col]], .data[[rda_col]])) +
-    geom_abline() +
-    geom_vline(xintercept = 0) +
-    geom_hline(yintercept = 0) +
-    geom_point(
-      aes(
-        color = .data[[dprime_col]],
-        alpha = highlight_overlay(
-          .data[[dprime_col]],
-          upper = quantile(.data[[dprime_col]], 0.9),
-          lower = min(.data[[dprime_col]]),
-          lower_alpha = 0.5
-        )
-      ),
-      stroke = 0, size = 1
-    ) +
-    scale_alpha_identity(guide = "none") +
-    scale_color_continuous_diverging("Blue-Red 3", breaks = c(-7, 0, 7)) +
-    theme(
-      axis.line.x.bottom = element_blank(),
-      axis.line.y.left = element_blank(),
-      legend.position = c(1, 0.75),
-      legend.key.width = unit(1 / 16, "cm"),
-      legend.key.height = unit(1 / 6, "cm"),
-      legend.text = element_text(size = 6),
-      legend.title = element_text(size = 6),
-    ) +
-    labs(
-      x = x_label,
-      y = y_label,
-      color = color_label,
-      fill = color_label
-    ) +
-    coord_cartesian(xlim = c(-0.5, 1), ylim = c(-0.5, 1))
-
-  return(p_icc_scatter)
-}
-
-
-
-label_regions <- function(labels, width = 18) {
-  labels <- gsub("17Networks_", "", labels) %>% gsub("_", " ", .)
-  labels <- stringr::str_wrap(labels, width = width)
-  return(labels)
 }
 
 
@@ -269,6 +146,7 @@ plot_hist_diff <- function(
   
   ## compute contrast:
   data <- data %>%
+    as_tibble() %>%
     pivot_wider(id_cols = id_cols, names_from = names_from_col, values_from = values_from_col) %>%
     mutate(difference := {{ contrast }})
 
@@ -300,7 +178,8 @@ plot_hist_diff <- function(
 
 plot_scatter <- function(
   data, x_col, y_col,
-  color_col = "dprime",
+  id_cols, names_from, values_from,
+  color_col = "q05",
   linetype = "dashed",
   alpha_level = 0.75,
   point_size = 1,
@@ -308,10 +187,15 @@ plot_scatter <- function(
   x_lab = "statistic",
   y_lab = "Number of parcels",
   color_lab = "d'",
-  scale_color = colorspace::scale_color_continuous_diverging("Blue-Red 3", breaks = c(-7, 0, 7))
+  scale_color = colorspace::scale_color_continuous_diverging("Blue-Red 3", breaks = c(-7, 0, 7)),
+  pivot = TRUE
 ) {
   source(here::here("code", "inferential", "_parameters_viz.R"))
   
+  if (pivot) {
+    data <- pivot_wider(data, id_cols = all_of(id_cols), names_from = all_of(names_from), values_from = all_of(values_from))
+  }
+
   data %>%
     ## sort by color col to control plotting order of points
     arrange({{ color_col }}) %>%
@@ -338,7 +222,8 @@ plot_scatter <- function(
 
 
 arrange_plots <- function(
-  brains, means, diff, scatter,
+  brains,
+  lower_panels,
   plot_layout = c(
     patchwork::area(t = 0, b = 65, l = 0, r = 220),
     patchwork::area(t = 66, b = 100, l = 20, r = 200)
@@ -348,16 +233,132 @@ arrange_plots <- function(
   width = 8,
   height = 4.5,
   dev = cairo_pdf,
+  plot_annotations = NULL,
   ...
 ) {
 
-  comparison <- means + diff + scatter
-  p <- (patchwork::free(brains) / comparison) + patchwork::plot_layout(design = plot_layout)
+  p <- (patchwork::free(brains) / lower_panels) + patchwork::plot_layout(design = plot_layout)
+
+  if (!is.null(plot_annotations)) {
+    p <- p + plot_annotations
+  }
 
   if (!is.null(filename) && !is.null(path)) {
     ggsave(file.path(path, paste0(filename, ".pdf")), p, dev = cairo_pdf, height = height, width = width, ...)
   }
 
   p
+
+}
+
+
+arrange_figure_comparison <- function(
+  data, comparison_factor, comparison_factor_order, colors_comparison,
+  margins, title, path_figs_results, id_cols, color_col, color_lab, contrast_expr, filename,
+  alpha_level = 0.5,
+  value_col = "value",
+  breaks = c(-1, 0, 1),
+  limits = c(-1, 1),
+  fill_labs = "TRR (r)"
+) {
+  
+
+  # Set fill_col and names_from to be the character version of comparison_factor
+  fill_col <- as_string(ensym(comparison_factor))
+  names_from <- as_string(ensym(comparison_factor))
+  
+  # Set x_col and y_col based on comparison_factor_order
+  x_col <- comparison_factor_order[1]
+  y_col <- comparison_factor_order[2]
+
+  # Generate the surface plot
+  p_brains <- data %>%
+    mutate({{comparison_factor}} := factor({{comparison_factor}}, levels = comparison_factor_order)) %>%
+    group_by({{comparison_factor}}) %>%
+    plot_surface(
+      statistic = value_col,
+      limits = limits,
+      breaks = breaks,
+      alpha_col = NULL,
+      underlay = NULL
+    ) +
+    labs(fill = fill_labs) +
+    facet_grid(
+      vars({{comparison_factor}}),
+      labeller = labeller(
+        {{comparison_factor}} := setNames(names(comparison_factor_order), comparison_factor_order)
+        ),
+      switch = "y"
+    )
+  
+  # Generate the histogram of means
+  p_means <- plot_hist_means(
+    data,
+    value_col = value_col,
+    fill_col = fill_col,
+    alpha_level = alpha_level,
+    colors = colors_comparison,
+    text_label = comparison_factor_order
+  ) +
+  theme(plot.margin = unit(margins, "points"))
+  
+  # Generate the histogram of differences
+  p_diff <- plot_hist_diff(
+    data,
+    id_cols = id_cols,
+    names_from = names_from,
+    values_from = value_col,
+    contrast = eval(parse(text = contrast_expr))
+  ) +
+  theme(plot.margin = unit(margins, "points"))
+  
+  # Generate the comparison scatterplot
+  p_scatter <- plot_scatter(
+    data,
+    x_col = x_col,
+    y_col = y_col,
+    id_cols = id_cols,
+    names_from = names_from,
+    values_from = value_col,
+    color_col = color_col,
+    color_lab = color_lab
+  ) +
+  theme(plot.margin = unit(margins, "points"))
+  
+  # Arrange and save the plots
+  p <- arrange_plots(
+    p_brains,
+    p_means + p_diff + p_scatter,
+    plot_annotations = patchwork::plot_annotation(title = title),
+    filename = filename,
+    path = path_figs_results
+  )
+
+  list(
+    brains = p_brains, means = p_means, diff = p_diff, scatter = p_scatter,
+    arranged = p
+    )
+
+}
+
+
+
+pivot_and_contrast <- function(
+  data, contrast, id_cols, names_from, values_from,
+  new_col = difference,
+  ...
+  ) {
+
+  ## compute contrast:
+  data <- data %>%
+    pivot_wider(
+      id_cols = {{ id_cols }},
+      names_from = {{ names_from }},
+      values_from = {{ values_from }},
+      ...
+      ) %>%
+    mutate({{ new_col }} := {{ contrast }})
+  
+  data
 
 }

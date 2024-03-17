@@ -1,14 +1,15 @@
 ## reliability model parameters
 
 n_chains <- 4
-models <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma", "summarystat")
-models_hbm <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
-responses <- c("rda", "uv")
+
 models_hbm <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
 models_hbm <- setNames(models_hbm, c("Full", "ILS", "ILS Sym", "Homog"))
 models_hbm_vals2nms <- setNames(names(models_hbm), models_hbm)
 models <- c(models_hbm, "Sum Stat" = "summarystat")
-models_comparison <- c(HBM = "no_lscov_symm", ICC = "summarystat")
+models_comparison <- c(ICC = "summarystat", HBM = "no_lscov_symm")
+
+responses <- c("Univariate" = "uv", "Multivariate" = "rda")
+
 
 get_model_info <- function(model_name, response_name, session_name) {
 
