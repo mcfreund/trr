@@ -108,8 +108,8 @@ file_name <- paste0(
   "__cv_allsess_wave", do_waves[1], do_waves[2], ".csv"
 )
 file_name_weights <- gsub("^projections", "weights", file_name)
-file_name_noise_proj <- gsub("^projections", "noise_proj", file_name)
-file_name_noise_proj <- gsub("csv$", "RDS", file_name_noise_proj)
+file_name_noise_projs <- gsub("^projections", "noise_projs", file_name)
+file_name_noise_projs <- gsub("csv$", "RDS", file_name_noise_projs)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
@@ -151,7 +151,8 @@ ldf <- function(object, newdata, class_names = c("hi", "lo"), return_weights = F
 get_noise_projections <- function(weights_multiv, test_data) {
 
   n_vertex <- ncol(d_test)
-  w <- cbind(univar = rep(1/n_vertex, n_vertex), multiv = c(weights_multiv))
+  w <- cbind(univar = rep(1, n_vertex), multiv = c(weights_multiv))
+  w <- mfutils::scale2unit(w)  ## scale weight vectors to unit length
 
   ## get noise variance
 
@@ -169,7 +170,7 @@ get_noise_projections <- function(weights_multiv, test_data) {
   proj_scaled <- crossprod(w, pca$rotation)
   proj_relvar <- crossprod(w, pca$rotation %*% diag(pca$sd^2)) / sum(pca$sd^2)
   var_total <- sum(pca$sd^2)
-  weights_cossim <- crossprod(mfutils::scale2unit(w))[1, 2]
+  weights_cossim <- crossprod(w)[1, 2]
 
   ## arrange and return
 
@@ -192,6 +193,8 @@ if (FALSE) {
   wave_i <- 2
   session_i <- 3
   roi_i <- 1
+  subjs <- subjs[1:2]
+  rois <- rois[1:2]
 }
 
 
@@ -288,7 +291,7 @@ allres <-
 
       projs_all <- mfutils::enlist(sessions)
       weights_all <- mfutils::enlist(sessions)
-      noise_proj_all <- mfutils::enlist(sessions)
+      noise_projs_all <- mfutils::enlist(sessions)
       for (test in sessions) {
 
         train <- setdiff(sessions, test)
@@ -400,16 +403,16 @@ allres <-
         res_weights[, ":=" (subj = subj_val, task = task_val, wave = wave_val, vertex = 1:.N)]  ## add subj/sess info
         weights_all[[test]] <- res_weights
 
-        res_noise_proj <- rbindlist(noise_proj, idcol = "roi")
-        res_noise_proj[, ":=" (subj = subj_val, task = task_val, wave = wave_val, vertex = 1:.N)]  ## add subj/sess info
-        noise_proj_all[[test]] <- res_noise_proj
+        res_noise_projs <- rbindlist(noise_projs, idcol = "roi")
+        res_noise_projs[, ":=" (subj = subj_val, task = task_val, wave = wave_val)]  ## add subj/sess info
+        noise_projs_all[[test]] <- res_noise_projs
 
       }
 
       result <- rbindlist(projs_all, idcol = "test_session", fill = TRUE)
       result_weights <- rbindlist(weights_all, idcol = "test_session", fill = TRUE)
-      result_noise_proj <- rbindlist(noise_proj_all, idcol = "test_session", fill = TRUE)
-      list(projs = result, weights = result_weights, noise_proj = result_noise_proj)
+      result_noise_projs <- rbindlist(noise_projs_all, idcol = "test_session", fill = TRUE)
+      list(projs = result, weights = result_weights, noise_projs = result_noise_projs)
 
     },
 
@@ -427,10 +430,10 @@ allres <-
 stopCluster(cl)
 
 out <- rbindlist(allres[names(allres) == "projs"])
-fwrite(out, here("out", "spatial", file_name))
-
 out_weights <- rbindlist(allres[names(allres) == "weights"])
-fwrite(out_weights, here("out", "spatial", file_name_weights))
+out_noise_projs <- rbindlist(allres[names(allres) == "noise_projs"])
 
-out_noise_proj <- rbindlist(allres[names(allres) == "noise_proj"])
-saveRDS(out_noise_proj, here("out", "spatial", file_name_noise_proj))
+
+fwrite(out, here("out", "spatial", file_name))
+fwrite(out_weights, here("out", "spatial", file_name_weights))
+saveRDS(out_noise_projs, here("out", "spatial", file_name_noise_proj))
