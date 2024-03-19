@@ -281,7 +281,7 @@ hbm_vs_icc <-
   uv_mv_icc_hbm[response == "rda" & sum_fun %in% c("map", "pointest")] %>%
   pivot_and_contrast(
     contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
-    id_cols = c("region", "is_roi"),
+    id_cols = c("region", "is_roi", "tplus"),
     names_from = "model_nm",
     values_from = "value",
     new_col = "delta_loc"
@@ -302,15 +302,16 @@ d <- full_join(hbm_vs_icc, uv_vs_mv)
 d_ctab <- d %>%
   mutate(sign_delta_loc = sign(delta_loc), sign_delta_sd = sign(delta_sd)) %>%
   group_by(sign_delta_loc, sign_delta_sd, is_roi) %>%
-  summarise(n = n())
-p_quadrants_scatter <-
-  d %>%
-  ggplot(aes(delta_sd, delta_loc)) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0)  +
-  geom_point(shape = 21, size = 3) +
-  scale_x_continuous(limits = c(-1.5, 1.5)) +
-  scale_y_continuous(limits = c(-2, 2))
+  summarise(n = n()) %>%
+  mutate(
+    quadrant = case_when(
+      sign_delta_sd == -1 & sign_delta_loc == 1 ~ "q1",
+      sign_delta_sd == 1  & sign_delta_loc == 1 ~ "q2",
+      sign_delta_sd == 1 & sign_delta_loc == -1 ~ "q3",
+      sign_delta_sd == -1 & sign_delta_loc == -1 ~ "q4"
+    )
+  )
+
 
 ## posterior density panel
 
@@ -324,7 +325,7 @@ examples <- list(
 )
 p_eg <- enlist(names(examples))
 for (q in seq_along(examples)) {
-  p_eg[[q]] <-
+  p_eg[[q]] <- 
     posterior_samples$trr[region %in% examples[[q]]] %>%
     ggplot(aes(value, color = response, fill = response)) +
     geom_density(linewidth = 1.5, aes(fill = NULL, group = response)) +
@@ -368,10 +369,83 @@ p_quadrants_density <-
   ) +
   labs(x = "TRR", y = "posterior density") +
   scale_x_continuous(limits = c(-1, 1), breaks = c(-1, 0, 1)) +
-  scale_y_continuous(breaks = 0)
+  scale_y_continuous(breaks = 0) +
+  geom_text(
+    data = data.frame(
+      value = -0.6,
+      response = c("uv", "rda"),
+      label = c("univar.", "\n\nmultivar."),
+      region = eg[1]
+    ),
+    aes(label = label, y = 2),
+    size = 3
+  )
+
+
+## scatter plot:
+
+p_quadrants_scatter <-
+  d %>% 
+  mutate(is_example_region = region %in% eg) %>%
+  arrange(is_example_region, tplus) %>%
+  ggplot(aes(delta_sd, delta_loc)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed")  +
+  geom_text(
+    data = d_ctab %>% 
+      group_by(quadrant) %>%
+      summarize(n = sum(n)) %>%
+      mutate(
+        delta_sd = case_when(
+          quadrant == "q1" ~ -0.7,
+          quadrant == "q2" ~ 1,
+          quadrant == "q3" ~ 1,
+          quadrant == "q4" ~ -0.7
+        ),
+        delta_loc = case_when(
+          quadrant == "q1" ~ 2,
+          quadrant == "q2" ~ 2,
+          quadrant == "q3" ~ -0.7,
+          quadrant == "q4" ~ -0.7
+        ),
+    ),
+    aes(label = paste0("N = ", n)),
+    size = 4,
+    color = "black"
+  ) +
+  geom_point(
+    aes(color = tplus, shape = is_example_region, alpha = is_example_region, stroke = is_example_region),
+    size = 1.5
+  ) +
+  #scale_x_continuous(limits = c(-1, 1.5)) +
+  #scale_y_continuous(limits = c(-1.5, 2)) +
+  scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6)) +
+  scale_shape_manual(values = c("TRUE" = 8, "FALSE" = 16)) +
+  scale_alpha_manual(values = c("TRUE" = 4/5, "FALSE" = 3/4)) +
+  labs(
+    x = "\U0394Precision(TRR): multivar. \U2212 univar.\n(log ratio)",
+    y = "\U0394Mode(TRR): multivar. \U2212 univar.\n(z difference)",
+    color = bquote("t"^"+")
+  ) +
+  guides(shape = "none", alpha = "none", color = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
+  theme(
+    legend.position = c(0.85, 0.1),
+    legend.direction = "horizontal",
+    legend.key.height = unit(1 / 8, "cm"),
+    legend.key.width = unit(1 / 4, "cm"),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6)
+  )
+
 
 p_quadrants <- p_quadrants_scatter + p_quadrants_density
-ggsave(file.path(path_figs_results, "quadrants.pdf"), p_quadrants, dev = cairo_pdf, width = 130, height = 130/1.75, unit = "mm")
+ggsave(
+  file.path(path_figs_results, "quadrants.pdf"),
+  p_quadrants,
+  dev = cairo_pdf, width = 130, height = 130/1.75, unit = "mm")
+
+
+
 
 
 ## association between SD(TRR) and reduction in trial-level noise ----
