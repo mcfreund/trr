@@ -36,11 +36,33 @@ label_regions_eg <- \(x) paste0("q", 1:4, "\n", label_regions(eg))
 
 
 
+pivot_and_contrast <- function(
+  data, contrast_expr, id_cols, names_from, values_from,
+  new_col = "difference",
+  ...
+) {
+  ## compute contrast:
+
+  contrast <- rlang::parse_expr(contrast_expr)
+  
+  data <- data %>%
+    pivot_wider(
+      id_cols = all_of(id_cols),
+      names_from = all_of(names_from),
+      values_from = all_of(values_from),
+      ...
+    ) %>%
+    mutate(!!new_col := !!contrast)
+  
+  data
+}
+
+
 plot_surface <- function(
   data,
   statistic_col,
   border_color_col = "is_roi",
-  border_size_col = border_color_col,
+  border_size_col = "is_roi",
   border_color_values = color_line_roi,
   border_size_values = size_line_roi,
   alpha_col = "alpha_level",
@@ -48,14 +70,25 @@ plot_surface <- function(
   underlay = c(color = "grey", fill = "grey"),
   atlas_data = atlas,
   scale_fill = \(...) scale_fill_viridis_c(option = "magma", na.value = "white", ...),
-  theme_ = theme_surface(),
+  fill_label = "statistic",
+  theme_ = theme_surface(strip.text = element_text(size = rel(1))),
   guides_ = guides(
     fill = guide_colorbar(title.position = "left", title.vjust = 0.9),
     alpha = "none", color = "none", size = "none"
   ),
+  facet_factor = NULL,
+  facet_factor_order,
   ...
 ) {
   source(here::here("code", "inferential", "_parameters_viz.R"))
+  
+  ## group_by if facetting:
+  if (!is_null(facet_factor)) {
+    facet_factor_sym <- rlang::parse_expr(facet_factor)
+    data <- data %>%
+      group_by(.data[[facet_factor]]) %>%
+      mutate({{facet_factor_sym}} := factor({{facet_factor_sym}}, levels = names(facet_factor_order)))
+  }
   
   # Global aesthetics
 
@@ -86,13 +119,26 @@ plot_surface <- function(
   ## overlay
 
   if (!is.null(alpha_col)) {
-    p <- p + ggseg::geom_brain(aes(alpha = .data[[alpha_col]]), atlas = atlas_data, position = position)
+    p <- p + ggseg::geom_brain(aes(alpha = .data[[alpha_col]]), atlas = atlas_data, position = position) + scale_alpha_identity()
   } else {
     p <- p + ggseg::geom_brain(atlas = atlas_data, position = position)
   }
 
+  ## facet
+  
+  if (!is_null(facet_factor)) {
+    facet_factor_sym <- rlang::parse_expr(facet_factor)
+    p <- p + 
+      facet_grid(
+        vars({{facet_factor_sym}}),
+        labeller = labeller(
+          {{facet_factor_sym}} := setNames(facet_factor_order, names(facet_factor_order))
+        ),
+        switch = "y")
+  }
+
   ## scales, guides, themes
-  p <- p + scale_fill(...) + guides_ + theme_
+  p <- p + scale_fill(...) + labs(fill = fill_label) + guides_ + theme_
 
   p
 
@@ -104,17 +150,17 @@ plot_hist_means <- function(
   data, value_col, fill_col, text_label, colors,
   alpha_level = 0.5,
   n_bins = 10,
-  text_y = c(125, 75),
-  text_x = c(-2/3, -2/3),
+  text_y = c(140, 75),
+  text_x = c(-1/2, -1/2),
   text_size = 4,
   x_lab = "statistic",
   y_lab = "Number of parcels"
 ) {
-  
+
   ## create object to hold colored text labels
-  text_data <- data.frame(label = names(text_label), y = text_y)
+  text_data <- data.frame(label = text_label, y = text_y)
   text_data[[value_col]] <- text_x
-  text_data[[fill_col]]  <- text_label
+  text_data[[fill_col]] <- names(text_label)
 
   data %>%
     ggplot(aes(.data[[value_col]], fill = .data[[fill_col]])) +
@@ -130,11 +176,12 @@ plot_hist_means <- function(
 
 
 plot_hist_diff <- function(
-  data, id_cols, names_from_col, values_from_col, contrast,
+  data,
+  value_col = "difference",
   fill_col = "is_roi",
-  text_label = c("'ROIs'" = TRUE, "all parcels" = FALSE),
+  text_label = c("'ROIs'" = TRUE, "all" = FALSE),
   colors = colors_roi,
-  text_x = c(-1, -1),
+  text_x = c(-0.9, -0.9),
   text_y = c(50, 70),
   text_size = 4,
   n_bins = 10,
@@ -144,19 +191,13 @@ plot_hist_diff <- function(
 ) {
   source(here::here("code", "inferential", "_parameters_viz.R"))
   
-  ## compute contrast:
-  data <- data %>%
-    as_tibble() %>%
-    pivot_wider(id_cols = id_cols, names_from = names_from_col, values_from = values_from_col) %>%
-    mutate(difference := {{ contrast }})
-
   ## create object to hold colored text labels
   text_data <- data.frame(label = names(text_label), y = text_y)
   text_data$difference <- text_x
   text_data[[fill_col]]  <- text_label
 
   data %>%
-    ggplot(aes(difference, fill = .data[[fill_col]], color = .data[[fill_col]])) +
+    ggplot(aes(.data[[value_col]], fill = .data[[fill_col]], color = .data[[fill_col]])) +
     geom_histogram(position = "identity", fill = colors[["FALSE"]], color = "black", bins = n_bins) +
     geom_histogram(
       data = . %>% filter(.data[[fill_col]]),
@@ -177,46 +218,55 @@ plot_hist_diff <- function(
 
 
 plot_scatter <- function(
-  data, x_col, y_col,
-  id_cols, names_from, values_from,
-  color_col = "q05",
+  data, x_col, y_col, color_col, axis_labs,
   linetype = "dashed",
   alpha_level = 0.75,
   point_size = 1,
-  breaks = c(-1, 0, 1),
-  x_lab = "statistic",
-  y_lab = "Number of parcels",
-  color_lab = "d'",
-  scale_color = colorspace::scale_color_continuous_diverging("Blue-Red 3", breaks = c(-7, 0, 7)),
-  pivot = TRUE
+  breaks_x = c(-1, 0, 1),
+  breaks_y = c(-1, 0, 1),
+  limits_x = c(-1, 1),
+  limits_y = c(-1, 1),
+  legend_position = c(0.5, -0.5),
+  color_lab = univ_stat_lab,
+  scale_color = colorspace::scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6)),
+  add_zero_lines = TRUE
 ) {
-  source(here::here("code", "inferential", "_parameters_viz.R"))
-  
-  if (pivot) {
-    data <- pivot_wider(data, id_cols = all_of(id_cols), names_from = all_of(names_from), values_from = all_of(values_from))
-  }
 
-  data %>%
+  source(here::here("code", "inferential", "_parameters_viz.R"))
+  color_sym <- rlang::parse_expr(color_col)
+
+  p <- data %>%
     ## sort by color col to control plotting order of points
-    arrange({{ color_col }}) %>%
+    as_tibble %>%
+    ungroup %>%
+    arrange({{ color_sym }}) %>%
     ggplot(aes(.data[[x_col]], .data[[y_col]])) +
-    geom_abline(linetype = linetype) +
-    geom_vline(xintercept = 0, linetype = linetype) +
-    geom_hline(yintercept = 0, linetype = linetype) +
+    geom_abline(linetype = linetype)
+  
+  if (add_zero_lines) {
+    p <- p +
+      geom_vline(xintercept = 0, linetype = linetype) +
+      geom_hline(yintercept = 0, linetype = linetype)
+  }
+  
+  p <- p +
     geom_point(aes(color = .data[[color_col]]), alpha = alpha_level, stroke = 0, size = point_size) +
     scale_color +
     theme(
-      axis.line.x.bottom = element_blank(),
-      axis.line.y.left = element_blank(),
-      legend.position = c(1, 0.75),
-      legend.key.width = unit(1 / 16, "cm"),
-      legend.key.height = unit(1 / 6, "cm"),
+      legend.position = legend_position,
+      legend.direction = "horizontal",
+      legend.key.height = unit(1 / 8, "cm"),
+      legend.key.width = unit(1 / 4, "cm"),
       legend.text = element_text(size = 6),
       legend.title = element_text(size = 6),
     ) +
-    labs(x = x_lab, y = y_lab, color = color_lab) +
-    scale_x_continuous(breaks = breaks) +
-    scale_y_continuous(breaks = breaks)
+    labs(
+      x = axis_labs[names(axis_labs) == x_col],
+      y = axis_labs[names(axis_labs) == y_col],
+      color = color_lab
+    ) +
+    scale_x_continuous(breaks = breaks_x, limits = limits_x) +
+    scale_y_continuous(breaks = breaks_y, limits = limits_y)
 
 }
 
@@ -230,10 +280,11 @@ arrange_plots <- function(
   ),
   filename = NULL,
   path = NULL,
-  width = 8,
-  height = 4.5,
+  width = 183,
+  height = 110,
   dev = cairo_pdf,
   plot_annotations = NULL,
+  units = "mm",
   ...
 ) {
 
@@ -244,7 +295,9 @@ arrange_plots <- function(
   }
 
   if (!is.null(filename) && !is.null(path)) {
-    ggsave(file.path(path, paste0(filename, ".pdf")), p, dev = cairo_pdf, height = height, width = width, ...)
+    ggsave(
+      file.path(path, paste0(filename, ".pdf")),
+      p, dev = cairo_pdf, height = height, width = width, units = units, ...)
   }
 
   p
@@ -252,78 +305,76 @@ arrange_plots <- function(
 }
 
 
+create_args <- function(plot_func, ...) {
+  # Get the default arguments of the plotting function
+  default_args <- formals(plot_func)
+  #browser()
+  
+  # Create an environment from the default arguments
+  args_env <- list2env(as.list(default_args))
+  
+  # Update the environment with any additional arguments provided
+  list2env(list(...), envir = args_env)
+  
+  # Return the updated arguments as a list
+  as.list(args_env)
+}
+
+
+
 arrange_figure_comparison <- function(
-  data, comparison_factor, comparison_factor_order, colors_comparison,
-  margins, title, path_figs_results, id_cols, color_col, color_lab, contrast_expr, filename,
-  alpha_level = 0.5,
-  value_col = "value",
-  breaks = c(-1, 0, 1),
-  limits = c(-1, 1),
-  fill_labs = "TRR (r)"
+  data, contrast_expr, comparison_factor, comparison_factor_order,
+  title, path, filename,
+  params_plot_surface = NULL,
+  params_plot_hist_means = NULL,
+  params_plot_hist_diff = NULL,
+  params_plot_scatter = NULL,
+  id_cols = c("region", "tplus", "q05", "is_roi"),
+  value_col = "value"
 ) {
+  source(here::here("code", "inferential", "_parameters_viz.R"))
   
+  ## order factor levels (defines order of surface rows):
+  comparison_factor_sym <- rlang::parse_expr(comparison_factor)
+  data <- data %>% 
+    mutate({{comparison_factor_sym}} := factor({{comparison_factor_sym}}, levels = names(comparison_factor_order)))
 
-  # Set fill_col and names_from to be the character version of comparison_factor
-  fill_col <- as_string(ensym(comparison_factor))
-  names_from <- as_string(ensym(comparison_factor))
-  
-  # Set x_col and y_col based on comparison_factor_order
-  x_col <- comparison_factor_order[1]
-  y_col <- comparison_factor_order[2]
+  ## create data for hist diff and scatter: pivot to wide and contrast
+  data_wide <- pivot_and_contrast(
+    data,
+    contrast_expr = contrast_expr,  ## evaluate in context of data
+    id_cols = id_cols,
+    names_from = comparison_factor,
+    values_from = value_col
+  )
 
-  # Generate the surface plot
-  p_brains <- data %>%
-    mutate({{comparison_factor}} := factor({{comparison_factor}}, levels = comparison_factor_order)) %>%
-    group_by({{comparison_factor}}) %>%
-    plot_surface(
-      statistic = value_col,
-      limits = limits,
-      breaks = breaks,
-      alpha_col = NULL,
-      underlay = NULL
-    ) +
-    labs(fill = fill_labs) +
-    facet_grid(
-      vars({{comparison_factor}}),
-      labeller = labeller(
-        {{comparison_factor}} := setNames(names(comparison_factor_order), comparison_factor_order)
-        ),
-      switch = "y"
-    )
+  ## create argument lists based on defaults, common args, and unique args (params_*)
+  ## common:
+  new_surface <- list(plot_func = plot_surface,
+    data = data, statistic_col = value_col, facet_factor = comparison_factor,
+    facet_factor_order = comparison_factor_order
+  )
+  new_hist_means <- list(plot_func = plot_hist_means,
+    data = data, value_col = value_col, fill_col = comparison_factor
+  )
+  new_hist_diff <- list(plot_func = plot_hist_diff, data = data_wide)
+  new_scatter <- list(
+    plot_func = plot_scatter, data = data_wide,
+    x_col = names(comparison_factor_order)[1],
+    y_col = names(comparison_factor_order)[2]
+  )
   
-  # Generate the histogram of means
-  p_means <- plot_hist_means(
-    data,
-    value_col = value_col,
-    fill_col = fill_col,
-    alpha_level = alpha_level,
-    colors = colors_comparison,
-    text_label = comparison_factor_order
-  ) +
-  theme(plot.margin = unit(margins, "points"))
-  
-  # Generate the histogram of differences
-  p_diff <- plot_hist_diff(
-    data,
-    id_cols = id_cols,
-    names_from = names_from,
-    values_from = value_col,
-    contrast = eval(parse(text = contrast_expr))
-  ) +
-  theme(plot.margin = unit(margins, "points"))
-  
-  # Generate the comparison scatterplot
-  p_scatter <- plot_scatter(
-    data,
-    x_col = x_col,
-    y_col = y_col,
-    id_cols = id_cols,
-    names_from = names_from,
-    values_from = value_col,
-    color_col = color_col,
-    color_lab = color_lab
-  ) +
-  theme(plot.margin = unit(margins, "points"))
+  ## add unique and defaults:
+  args_plot_surface <- do.call(create_args, c(new_surface, params_plot_surface))
+  args_plot_hist_means <- do.call(create_args, c(new_hist_means, params_plot_hist_means))
+  args_plot_hist_diff <- do.call(create_args, c(new_hist_diff, params_plot_hist_diff))
+  args_plot_scatter <- do.call(create_args, c(new_scatter, params_plot_scatter))
+    
+  # Generate plots:
+  p_brains <- do.call(plot_surface, args_plot_surface)
+  p_means <- do.call(plot_hist_means, args_plot_hist_means)
+  p_diff <- do.call(plot_hist_diff, args_plot_hist_diff)
+  p_scatter <- do.call(plot_scatter, args_plot_scatter)
   
   # Arrange and save the plots
   p <- arrange_plots(
@@ -331,34 +382,13 @@ arrange_figure_comparison <- function(
     p_means + p_diff + p_scatter,
     plot_annotations = patchwork::plot_annotation(title = title),
     filename = filename,
-    path = path_figs_results
+    path = path
   )
 
   list(
     brains = p_brains, means = p_means, diff = p_diff, scatter = p_scatter,
     arranged = p
-    )
+  )
 
 }
 
-
-
-pivot_and_contrast <- function(
-  data, contrast, id_cols, names_from, values_from,
-  new_col = difference,
-  ...
-  ) {
-
-  ## compute contrast:
-  data <- data %>%
-    pivot_wider(
-      id_cols = {{ id_cols }},
-      names_from = {{ names_from }},
-      values_from = {{ values_from }},
-      ...
-      ) %>%
-    mutate({{ new_col }} := {{ contrast }})
-  
-  data
-
-}

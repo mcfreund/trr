@@ -68,19 +68,19 @@ popef <-
   dcast(... ~ sum_fun, value.var = "value") %>%
   mutate(
     is_roi = quantile(q05, 0.9) < q05,
-    alpha_level = highlight_overlay(mean, upper = quantile(mean, 0.9), lower = min(mean), lower_alpha = 0),
     tplus = mean / sd,
     is_roi_mean = quantile(mean, 0.9) < mean,
     is_roi_map = quantile(map, 0.9) < map,
     is_roi_tplus = quantile(tplus, 0.9) < tplus,
     network = get_network(region)
-  )
+  ) %>%
+  rename(m = mean)  ## population-level univariate stroop contrast
 
 ## examine similarities:
 if (FALSE) {
   sum(popef$is_roi & popef$is_roi_mean)  ## agreement (out of 40)
   sum(popef$is_roi & popef$is_roi_tplus)
-  pairs(popef[, c("map", "mean", "q05", 'sd', "tplus")])
+  pairs(popef[, c("m", "map", "q05", 'sd', "tplus")])
 }
 
 popef_network <- popef %>%
@@ -93,11 +93,11 @@ popef_network <- popef %>%
   )
 
 
-
 ## format for plotting ----
 
 ## reorder popef:
-popef <- popef %>% mutate(network = factor(network, levels = popef_network$network[order(popef_network$q05)]))
+popef <- popef %>% 
+  mutate(network = factor(network, levels = popef_network$network[order(popef_network$q05)]))
 popef_network <- popef_network %>%
   mutate(network = factor(network, levels = popef_network$network[order(popef_network$q05)]))
 
@@ -107,36 +107,23 @@ uv_mv_icc_hbm <-
     summarystats$trr %>% rename(value = r) %>% mutate(sum_fun = "pointest", statistic = "trr"),
     posterior_summaries$trr
   ) %>%
-  full_join(popef %>% select(region, q05, is_roi, alpha_level), by = "region")
+  full_join(popef %>% select(region, tplus, q05, is_roi), by = "region")
 
 
 ## population-level contrast on univariate response ----
 
 ## plot surfaces
 
-p_pop_brain_thresh <-
-  popef %>%
-  plot_surface(
-    statistic = "mean",
-    #limits = c(-0.1, 0.13),
-    breaks = c(-0.1, 0, 0.1)
-  ) +
-  labs(fill = "d") +
-  theme(legend.position = c(0.5, 0))
 p_pop_brain_unthresh <-
   popef %>%
   plot_surface(
-    statistic = "mean",
-    #limits = c(. %>% min(mean), . %>% max(mean)),
-    breaks = c(-0.1, 0, 0.1),
+    statistic = "tplus",
     underlay = NULL,
     alpha_col = NULL
   ) +
-  labs(fill = "d") +
+  labs(fill = univ_stat_lab) +
   theme(legend.position = c(0.5, 0))
-
-ggsave(file.path(path_figs_results_supp, "pop_d_thresh.pdf"), p_pop_brain_thresh, height = 2, width = 4.5)
-ggsave(file.path(path_figs_results_supp, "pop_d_unthresh.pdf"), p_pop_brain_unthresh, height = 2, width = 4.5)
+ggsave(file.path(path_figs_results_supp, "pop_tplus_unthresh.pdf"), p_pop_brain_unthresh, height = 2, width = 4.5)
 
 ## check stats within network assignments
 
@@ -147,7 +134,11 @@ p_parcel_q05 <-
   ggplot(aes(q05, fill = is_roi)) +
   geom_histogram(bins = 30) +
   geom_vline(xintercept = quantile(popef$q05, 0.9)) +
-  labs(x = "Population-Level\nUnivar. Stroop Effect (d)", y = "Number of parcels") +
+  labs(x = "Population-level univariate\nStroop contrast (5%ile)", y = "Number of parcels") +
+  annotate(
+    geom = "text", x = thresh_roi + 0.005, y = 30, label = "'ROI'", color = colors_roi[["TRUE"]], size = 3,
+    hjust = 0
+  ) +
   scale_fill_manual(values = colors_roi) +
   scale_x_continuous(breaks = c(-0.1, 0.1, round(thresh_roi, 2))) +
   theme(legend.position = "none")
@@ -156,14 +147,17 @@ p_network_q05 <-
   popef %>%
   ggplot(aes(q05, network)) +
   geom_vline(xintercept = thresh_roi) +
-  geom_boxplot(fill = "grey", color = "black", width = 0.4) +
+  geom_boxplot(fill = "grey", color = "black", width = 0.5) +
   theme(
     axis.line.y.left = element_blank(),
     panel.grid.major.y = element_line(linewidth = rel(0.25), linetype = "dashed"),
     axis.text.y = element_text(size = rel(0.75))
   ) +
   scale_x_continuous(breaks = c(-0.1, 0.1, round(thresh_roi, 2))) +
-  labs(y = "Cortical Network\n(Schaefer 400-17)", x = "Population-Level\nStroop Effect (d')")
+  labs(
+    y = "Cortical Network\n(Schaefer 400-17)",
+    x = "Population-level univariate\nStroop contrast (5%ile)"
+  )
 
 p_network_props <-
   popef_network %>%
@@ -178,7 +172,6 @@ p_network_props <-
   ) +
   scale_fill_manual(values = colors_roi) +
   scale_x_continuous(limits = c(0, 0.5), breaks = c(0, 0.25, 0.5)) +
-  #scale_color_manual(values = c("TRUE" = "white", "FALSE" = "black")) +
   theme(
     axis.line.y.left = element_blank(),
     axis.text.y = element_text(size = rel(0.75)),
@@ -192,58 +185,34 @@ ggsave(
   height = 3, width = 9
 )
 
-arrange_plots(
+p_uv <- arrange_plots(
   p_pop_brain_unthresh,
   p_parcel_q05 + p_network_q05 + p_network_props,
   filename = "pop_uv",
   path = path_figs_results,
   plot_layout = c(
-    area(t = 0, b = 62, l = 0, r = 220),
-    area(t = 55, b = 100, l = 20, r = 200)
+    area(t = 1, b = 62, l = 1, r = 220),
+    area(t = 63, b = 100, l = 21, r = 200)
   ),
-  height = 5
+  width = two_column_width,
+  height = two_column_width/1.9
 )
 
 
-## location(TRR): ICC versus HBM, separately within univariate and multivariate ----
+## comparison plots ----
+## see params_comparison_plots list in _parameters_viz.R
 
-plots_icc_vs_hbm <- enlist(responses)
-for (response_i in seq_along(responses)) {
-  plots_icc_vs_hbm[[response_i]] <- arrange_figure_comparison(
-    data = uv_mv_icc_hbm[response == responses[[response_i]] & sum_fun %in% c("pointest", "map")],
-    comparison_factor = model_nm,
-    comparison_factor_order = models_comparison,
-    colors_comparison = colors_models_comparison,
-    margins = margins,
-    title = titles[[response_i]],
-    path_figs_results = path_figs_results,
-    id_cols = c("region", "is_roi", "alpha_level", "q05"),
-    color_col = "q05",
-    color_lab = "d'",
-    contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
-    filename = paste0("trr_", responses[[response_i]])
-  )
+plots_comparison <- enlist(names(params_comparison_plots))
+for (plot_i in seq_along(params_comparison_plots)) {
+  pars <- params_comparison_plots[[plot_i]]
+  ## subset
+  data <- uv_mv_icc_hbm[eval(pars$i_expr), ]
+  ## modify
+  if (!is.null(pars$j_expr)) data[, eval(pars$j_expr)]
+  ## plot
+  arrange_args <- c(list(data = data), pars[!names(pars) %in% c("i_expr", "j_expr")])
+  plots_comparison[[plot_i]] <- do.call(arrange_figure_comparison, arrange_args)
 }
-
-## precision(TRR): univariate versus multivariate ----
-
-plot_trr_precision <- arrange_figure_comparison(
-  data = uv_mv_icc_hbm[sum_fun == "sd"] %>% mutate(value = 1/log(value)),
-  limits = NULL,
-  comparison_factor = response,
-  comparison_factor_order = responses,
-  colors_comparison = colors_response,
-  margins = margins,
-  title = titles[[response_i]],
-  path_figs_results = path_figs_results,
-  id_cols = c("region", "is_roi", "alpha_level", "q05"),
-  color_col = "q05",
-  color_lab = "d'",
-  contrast_expr = "rda - uv",
-  filename = "trrprecision"
-)
-
-plot_trr_precision
 
 
 ## TRR thresholded: univariate versus multivariate ----
@@ -256,7 +225,7 @@ data <- full_join(
     group_by(response) %>%
     mutate(
       lb = value,
-      alpha_trr = highlight_overlay(value, upper = 0, lower = -1, lower_alpha = 0),
+      alpha_trr = highlight_overlay(value, upper = 0, lower = -0.5, lower_alpha = 0.1),
       value = NULL
     )
 )
@@ -270,37 +239,37 @@ if (FALSE) {
     facet_wrap(~response)
 }
 
+wrapped_labs <- stringr::str_wrap(comparison_factor_labs$uv_mv, width = 7)
+names(wrapped_labs) <- names(comparison_factor_labs$uv_mv)
 p_trr_thresh_brains <-
   data %>%
-  mutate(response = factor(response, levels = responses)) %>%
-  group_by(response) %>%
   plot_surface(
     statistic_col = "value",
-    #underlay = NULL,
     underlay = c(color = "grey", fill = "white"),
-    border_size_values = c("TRUE" = 0.3, "FALSE" = 0.2),
     limits = c(-0.5, 1),
     breaks = c(0, 0.5, 1),
-    alpha_col = "alpha_trr"
+    alpha_col = "alpha_trr",
+    facet_factor = "response",
+    facet_factor_order = wrapped_labs,
+    fill_label = "mean(posterior) TRR (r)"
   ) +
-  scale_alpha_identity(guide = TRUE) +
-  labs(fill = "mean(TRR)") +
-  facet_grid(
-    vars(response),
-    labeller = labeller(response = setNames(names(responses), responses)),
-    switch = "y"
+  theme(
+    legend.position = c(0.25, -0.1),
+    #plot.caption = element_text(hjust = 0)
+    plot.caption.position = "plot"
+    ) +
+  guides(fill = guide_colorbar(title.position = "top")) +
+  labs(
+    caption = "opacity based on 5%ile(posterior) TRR;   \nfully opaque parcels have 5%ile > 0   "
   )
-p_trr_thresh_brains
-ggsave(file.path(path_figs_results, "trr_thresh.pdf"), p_trr_thresh_brains, height = 2, width = 4.5)
+ggsave(
+  file.path(path_figs_results, "trr_thresh.pdf"),
+  p_trr_thresh_brains,
+  width = oneandhalf_column_width,
+  height = 55,
+  units = "mm"
+)
 
-# uv_mv_icc_hbm %>%
-#   filter(sum_fun == "q05") %>%
-#   pivot_wider(id_cols = c("region", "is_roi"), names_from = "response", values_from = "value") %>%
-#   ggplot(aes(uv, rda)) +
-#   geom_hline(yintercept = 0) +
-#   geom_vline(xintercept = 0) +
-#   geom_point(aes(color = is_roi), size = 4) +
-#   theme_default(base_size = 12)
 
 
 ## complementary benefits and example posteriors ----
@@ -311,21 +280,21 @@ ggsave(file.path(path_figs_results, "trr_thresh.pdf"), p_trr_thresh_brains, heig
 hbm_vs_icc <-
   uv_mv_icc_hbm[response == "rda" & sum_fun %in% c("map", "pointest")] %>%
   pivot_and_contrast(
-    contrast = atanh(no_lscov_symm) - atanh(summarystat),
+    contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
     id_cols = c("region", "is_roi"),
     names_from = "model_nm",
     values_from = "value",
-    new_col = delta_loc
+    new_col = "delta_loc"
   )
 ## change in TRR in HBM versus SumStat estimates (y axis):
 uv_vs_mv <-
   posterior_summaries$trr[sum_fun == "sd"] %>%
   pivot_and_contrast(
-    contrast = log(uv) - log(rda),
+    contrast = "log(uv) - log(rda)",
     id_cols = "region",
     names_from = "response",
     values_from = "value",
-    new_col = delta_sd
+    new_col = "delta_sd"
   )
 d <- full_join(hbm_vs_icc, uv_vs_mv)
 
@@ -412,22 +381,22 @@ ggsave(file.path(path_figs_results, "quadrants.pdf"), p_quadrants, dev = cairo_p
 response_ratio <-
   posterior_summaries$ratio[statistic == "ratio" & sum_fun == "map"] %>%
   pivot_and_contrast(
-    contrast = ratio_uv - ratio_rda,
-    id_cols = region,
-    names_from = response,
-    values_from = value,
-    new_col = delta_ratio,
+    contrast = "ratio_uv - ratio_rda",
+    id_cols = "region",
+    names_from = "response",
+    values_from = "value",
+    new_col = "delta_ratio",
     names_prefix = "ratio_"
   )
 ## yaxis: change in sd(TRR), multivariate - univariate
 response_sdtrr <-
   posterior_summaries$trr[sum_fun == "sd"] %>%
   pivot_and_contrast(
-    contrast = log(sdtrr_uv) - log(sdtrr_rda),
-    id_cols = region,
-    names_from = response,
-    values_from = value,
-    new_col = delta_sd,
+    contrast = "log(sdtrr_uv) - log(sdtrr_rda)",
+    id_cols = "region",
+    names_from = "response",
+    values_from = "value",
+    new_col = "delta_sd",
     names_prefix = "sdtrr_"
   )
 d_ratio_vs_sdtrr <- full_join(response_ratio, response_sdtrr, by = c("region"))
@@ -461,12 +430,10 @@ ggsave(
   file.path(path_figs_results, "variability_ratio_vs_precision.pdf"),
   p_ratio,
   dev = cairo_pdf, width = 4.5, height = 4, scale = 0.8
-  )
+)
 
 
 
 ## weight vector analysis ----
-
-
 
 
