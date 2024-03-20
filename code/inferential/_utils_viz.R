@@ -119,7 +119,9 @@ plot_surface <- function(
   ## overlay
 
   if (!is.null(alpha_col)) {
-    p <- p + ggseg::geom_brain(aes(alpha = .data[[alpha_col]]), atlas = atlas_data, position = position) + scale_alpha_identity()
+    p <- p + 
+      ggseg::geom_brain(aes(alpha = .data[[alpha_col]]), atlas = atlas_data, position = position) +
+      scale_alpha_identity()
   } else {
     p <- p + ggseg::geom_brain(atlas = atlas_data, position = position)
   }
@@ -380,7 +382,7 @@ arrange_figure_comparison <- function(
   p <- arrange_plots(
     p_brains,
     p_means + p_diff + p_scatter,
-    plot_annotations = patchwork::plot_annotation(title = title),
+    plot_annotations = patchwork::plot_annotation(title = title, theme = theme(plot.title = element_text(hjust = 0.5))),
     filename = filename,
     path = path
   )

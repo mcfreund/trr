@@ -348,7 +348,7 @@ lims_ratio <- list(
 
 p_stats <-
   (p_trr_stats$map[[1]] + lims_trr$y              + p_trr_stats$map[[2]] + lims_trr) /
-  (p_trr_stats$q10[[1]] + lims_trr$y      + p_trr_stats$q10[[2]] + lims_trr) /
+  (p_trr_stats$q05[[1]] + lims_trr$y      + p_trr_stats$q05[[2]] + lims_trr) /
   (p_ratio_stats$map[[1]] + lims_ratio$y          + p_ratio_stats$map[[2]] + lims_ratio) /
-  (p_ratio_stats$q10[[1]] + lims_ratio$y  + p_ratio_stats$q10[[2]] + lims_ratio)
+  (p_ratio_stats$q05[[1]] + lims_ratio$y  + p_ratio_stats$q05[[2]] + lims_ratio)
 ggsave(file.path(path_figs, "model_comparison", paste0("stroop_trratio_stats.pdf")), p_stats, width = 8, height = 7)

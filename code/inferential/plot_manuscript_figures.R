@@ -80,7 +80,7 @@ popef <-
 if (FALSE) {
   sum(popef$is_roi & popef$is_roi_mean)  ## agreement (out of 40)
   sum(popef$is_roi & popef$is_roi_tplus)
-  pairs(popef[, c("m", "map", "q05", 'sd', "tplus")])
+  pairs(popef[, c("m", "map", "q05", "sd", "tplus")])
 }
 
 popef_network <- popef %>%
@@ -251,16 +251,18 @@ p_trr_thresh_brains <-
     alpha_col = "alpha_trr",
     facet_factor = "response",
     facet_factor_order = wrapped_labs,
-    fill_label = "mean(posterior) TRR (r)"
+    fill_label = "Mean(TRR) (r)",
+    guides_ = guides(
+      fill = guide_colorbar(title.position = "top", title.vjust = 0.9),
+      color = "none", size = "none"
+    )
   ) +
   theme(
     legend.position = c(0.25, -0.1),
-    #plot.caption = element_text(hjust = 0)
     plot.caption.position = "plot"
-    ) +
-  guides(fill = guide_colorbar(title.position = "top")) +
+  ) +
   labs(
-    caption = "opacity based on 5%ile(posterior) TRR;   \nfully opaque parcels have 5%ile > 0   "
+    caption = "fully opaque parcels have 5%ile(TRR) > 0   "
   )
 ggsave(
   file.path(path_figs_results, "trr_thresh.pdf"),
@@ -307,8 +309,8 @@ d_ctab <- d %>%
     quadrant = case_when(
       sign_delta_sd == -1 & sign_delta_loc == 1 ~ "q1",
       sign_delta_sd == 1  & sign_delta_loc == 1 ~ "q2",
-      sign_delta_sd == 1 & sign_delta_loc == -1 ~ "q3",
-      sign_delta_sd == -1 & sign_delta_loc == -1 ~ "q4"
+      sign_delta_sd == -1 & sign_delta_loc == -1 ~ "q3",
+      sign_delta_sd == 1 & sign_delta_loc == -1 ~ "q4"
     )
   )
 
@@ -318,14 +320,14 @@ d_ctab <- d %>%
 ## plot example posteriors:
 dir.create(file.path(path_figs_results_supp, "example_posteriors"), showWarnings = FALSE)
 examples <- list(
-  ul = d %>% filter(delta_loc > 1, delta_sd < 0.1) %>% pull(region),
-  ur = d %>% filter(delta_loc > 1, delta_sd > 0.5) %>% pull(region),
-  br = d %>% filter(delta_loc < -0.5, delta_sd > 0) %>% pull(region),
-  bl = d %>% filter(delta_loc < -0.5, delta_sd < 0) %>% pull(region)
+  q1 = d %>% filter(delta_sd < 0.1, delta_loc > 1) %>% pull(region),
+  q2 = d %>% filter(delta_sd > 0.5, delta_loc > 1) %>% pull(region),
+  q3 = d %>% filter(delta_sd < 0, delta_loc < -0.5) %>% pull(region),
+  q4 = d %>% filter(delta_sd > 0, delta_loc < -0.5) %>% pull(region)
 )
 p_eg <- enlist(names(examples))
 for (q in seq_along(examples)) {
-  p_eg[[q]] <- 
+  p_eg[[q]] <-
     posterior_samples$trr[region %in% examples[[q]]] %>%
     ggplot(aes(value, color = response, fill = response)) +
     geom_density(linewidth = 1.5, aes(fill = NULL, group = response)) +
@@ -399,31 +401,29 @@ p_quadrants_scatter <-
         delta_sd = case_when(
           quadrant == "q1" ~ -0.7,
           quadrant == "q2" ~ 1,
-          quadrant == "q3" ~ 1,
-          quadrant == "q4" ~ -0.7
+          quadrant == "q3" ~ -0.7,
+          quadrant == "q4" ~ 1
         ),
         delta_loc = case_when(
-          quadrant == "q1" ~ 2,
-          quadrant == "q2" ~ 2,
-          quadrant == "q3" ~ -0.7,
-          quadrant == "q4" ~ -0.7
+          quadrant == "q1" ~ 1.8,
+          quadrant == "q2" ~ 1.8,
+          quadrant == "q3" ~ -0.5,
+          quadrant == "q4" ~ -0.5
         ),
     ),
-    aes(label = paste0("N = ", n)),
-    size = 4,
+    aes(label = paste0(quadrant, "\nN = ", n)),
+    size = 3,
     color = "black"
   ) +
   geom_point(
     aes(color = tplus, shape = is_example_region, alpha = is_example_region, stroke = is_example_region),
     size = 1.5
   ) +
-  #scale_x_continuous(limits = c(-1, 1.5)) +
-  #scale_y_continuous(limits = c(-1.5, 2)) +
   scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6)) +
   scale_shape_manual(values = c("TRUE" = 8, "FALSE" = 16)) +
   scale_alpha_manual(values = c("TRUE" = 4/5, "FALSE" = 3/4)) +
   labs(
-    x = "\U0394Precision(TRR): multivar. \U2212 univar.\n(log ratio)",
+    x = "\U0394Precision(TRR): multivar. \U2212 univar.\n(log)",
     y = "\U0394Mode(TRR): multivar. \U2212 univar.\n(z difference)",
     color = bquote("t"^"+")
   ) +
@@ -442,7 +442,8 @@ p_quadrants <- p_quadrants_scatter + p_quadrants_density
 ggsave(
   file.path(path_figs_results, "quadrants.pdf"),
   p_quadrants,
-  dev = cairo_pdf, width = 130, height = 130/1.75, unit = "mm")
+  dev = cairo_pdf, width = 130, height = 130 / 1.75, unit = "mm"
+)
 
 
 
@@ -463,51 +464,80 @@ response_ratio <-
     names_prefix = "ratio_"
   )
 ## yaxis: change in sd(TRR), multivariate - univariate
-response_sdtrr <-
-  posterior_summaries$trr[sum_fun == "sd"] %>%
-  pivot_and_contrast(
-    contrast = "log(sdtrr_uv) - log(sdtrr_rda)",
-    id_cols = "region",
-    names_from = "response",
-    values_from = "value",
-    new_col = "delta_sd",
-    names_prefix = "sdtrr_"
-  )
-d_ratio_vs_sdtrr <- full_join(response_ratio, response_sdtrr, by = c("region"))
+# response_sdtrr <-
+#   posterior_summaries$trr[sum_fun == "sd"] %>%
+#   pivot_and_contrast(
+#     contrast = "log(sdtrr_uv) - log(sdtrr_rda)",
+#     id_cols = "region",
+#     names_from = "response",
+#     values_from = "value",
+#     new_col = "delta_sd",
+#     names_prefix = "sdtrr_"
+#   )
+d_ratio_vs_sdtrr <- full_join(response_ratio, d, by = c("region"))
 
 p_ratio <-
   d_ratio_vs_sdtrr %>%
+  arrange(tplus) %>%
   ggplot(aes(delta_ratio, delta_sd)) +
-  geom_hline(yintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = 0, linetype = "dotted")  +
-  geom_abline(linetype = "dotted")  +
-  stat_ellipse(type = "t", linetype = "dotted") +
-  geom_point(shape = 21, size = 1.25) +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50")  +
+  geom_abline(linetype = "dotted", color = "grey50")  +
+  stat_ellipse(type = "t", linetype = "dotted", color = "grey50") +
+  geom_point(aes(color = tplus), shape = 16, size = 2, stroke = 0, alpha = 1) +
   labs(
-    x = "\u0394Variab. Ratio, univ.\u2212multiv.\n(log ratio)",
-    y = "\u0394SD(TRR), univ.\u2212multiv.\n(log ratio)"
+    x = "\u0394Variab. Ratio (log)",
+    y = "\U0394SD(TRR)  (log)",
+    color = bquote("t"^"+")
   ) +
   theme(legend.position = "none") +
   geom_text(
     data = . %>%
       summarize(r = cor(delta_ratio, delta_sd), rho = cor(delta_ratio, delta_sd, method = "spearman")) %>%
-      mutate(label = paste0("r = ", round(r, 2), "\n", "\n\u03C1 = ", round(rho, 2))),
-    aes(x = -1, y = 1, label = label),
+      mutate(label = paste0("r = ", round(r, 2), "\n", "\u03C1 = ", round(rho, 2))),
+    aes(x = 1.2, y = -0.3, label = label),
+    size = 3
   ) +
   scale_y_continuous(limits = c(-1.4, 1.4)) +
-  scale_x_continuous(limits = c(-1.3, 1.3))
-## add axis text labels:
-## relative certainty in TRR: increases with univariate -- increases with multivariate
-## amount of trial vs. subject variability: less trial variability in mutlivariate -- less trial variability in univariate
+  scale_x_continuous(limits = c(-1.3, 1.3)) +
+  annotate(
+    geom = "text", x = 0, y = -1.2, size = 3, label = "trial-level\nvariability", color = "grey50", fontface = "bold"
+  ) +
+  annotate(geom = "text", x = 1, y = -1.2, size = 3, label = "higher in\nunivariate", color = "grey50") +
+  annotate(geom = "text", x = -1, y = -1.2, size = 3, label = "higher in\nmultivariate", color = "grey50") +
+  annotate(
+    geom = "text", x = -1, y = 0, size = 3, label = "TRR\nvariability", angle = 90, color = "grey50", fontface = "bold"
+  ) +
+  annotate(geom = "text", x = -1, y = 1.2, size = 3, label = "higher in\nunivariate", color = "grey50") +
+  annotate(
+    geom = "segment", x = -0.6, xend = 0.6, y = -1.2, yend = -1.2,
+    arrow = arrow(ends = "both", type = "closed", length = unit(1, "mm")), color = "grey50"
+  ) +
+  annotate(
+    geom = "segment", x = -1, xend = -1, y = 0.75, yend = -0.75,
+    arrow = arrow(ends = "both", type = "closed", length = unit(1, "mm")), color = "grey50"
+  ) +
+  scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6)) +
+  guides(
+    shape = "none", alpha = "none", color = guide_colorbar(title.position = "top", title.hjust = 0.5)
+  ) +
+  theme(
+    legend.position = c(0.375, 0.9),
+    legend.direction = "horizontal",
+    legend.key.height = unit(1 / 8, "cm"),
+    legend.key.width = unit(1 / 4, "cm"),
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6)
+  )
 
 ggsave(
   file.path(path_figs_results, "variability_ratio_vs_precision.pdf"),
   p_ratio,
-  dev = cairo_pdf, width = 4.5, height = 4, scale = 0.8
+  dev = cairo_pdf, width = one_column_width, height = one_column_width*0.95,
+  units = "mm"
 )
 
 
 
 ## weight vector analysis ----
-
 

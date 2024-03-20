@@ -138,12 +138,10 @@ responses <- c("uv", "rda")
 
 titles <- c(
   icc_hbm_uv_trr = bquote(
-    "summary-statistic vs. hierarchical-bayes estimates of" ~ bold("test-retest reliability") ~
-      "in" ~ bold("univariate") ~ "Stroop contrasts"
+    bold("test-retest reliability") ~ "estimates in" ~ bold("univariate") ~ "Stroop contrasts"
   ),
   icc_hbm_mv_trr = bquote(
-    "summary-statistic vs. hierarchical-bayes estimates of" ~ bold("test-retest reliability") ~
-      "in" ~ bold("multivariate") ~ "Stroop contrasts"
+    bold("test-retest reliability") ~ "estimates in" ~ bold("multivariate") ~ "Stroop contrasts"
   ),
   uv_mv_trrprecision = bquote(
     bold("precision of") ~ "test-retest reliability estimates:"~ bold("univariate vs. multivariate")~"Stroop contrasts"
@@ -153,7 +151,11 @@ titles <- c(
 comparison_factor_labs <- list(
   icc_hbm_trr = c(
     "summarystat" = "Summary statistic\n(intra-class corr.)",
-    "no_lscov_symm" = "Hierarchical Bayes\n(max(posterior))"
+    "no_lscov_symm" = "Hierarchical Bayes\n(MAP estimate)"
+  ),
+  icc_hbm_trr_scatter = c(
+    "summarystat" = "Summary statistic",
+    "no_lscov_symm" = "Hierarchical Bayes"
   ),
   icc_hbm_trr_short = c(
     "summarystat" = "sum. stat.",
@@ -188,14 +190,14 @@ params_comparison_plots <- list(
     ),
     params_plot_hist_diff = list(
       colors = colors_roi,
-      x_lab = "\U0394TRR (z): Bayes\U2212Sum. Stat.",
+      x_lab = "\U0394TRR: Bayes \U2212 Sum. Stat.\n(z difference)",
       text_y = c(50, 80),
       text_x = c(-0.85, -0.85),
       text_label = c("'ROIs'" = TRUE, "all parcels" = FALSE)
     ),
     params_plot_scatter = list(
       color_col = "tplus",
-      axis_labs = comparison_factor_labs$icc_hbm_trr,
+      axis_labs = comparison_factor_labs$icc_hbm_trr_scatter,
       legend_position = c(0.75, 0.25),
       limits_x = c(-0.5, 1)
     )
@@ -223,14 +225,14 @@ params_comparison_plots <- list(
     ),
     params_plot_hist_diff = list(
       colors = colors_roi,
-      x_lab = "\U0394TRR (z): Bayes \U2212 Sum. Stat.",
+      x_lab = "\U0394TRR: Bayes \U2212 Sum. Stat.\n(z difference)",
       text_y = c(50, 95),
       text_x = c(-0.85, -0.85),
       text_label = c("'ROIs'" = TRUE, "all parcels" = FALSE)
     ),
     params_plot_scatter = list(
       color_col = "tplus",
-      axis_labs = comparison_factor_labs$icc_hbm_trr,
+      axis_labs = comparison_factor_labs$icc_hbm_trr_scatter,
       legend_position = c(0.75, 0.25),
       limits_x = c(-0.5, 1)
     )
@@ -267,7 +269,7 @@ params_comparison_plots <- list(
       text_label = c("'ROIs'" = TRUE, "all\nparcels" = FALSE)
     ),
     params_plot_scatter = list(
-      color_col = "tplus", axis_labs = comparison_factor_labs$uv_mv_trrprecision,
+      color_col = "tplus", axis_labs = comparison_factor_labs$uv_mv,
       limits_x = NULL,
       limits_y = NULL,
       breaks_x = c(-1.3, -1, -0.7),
