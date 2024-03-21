@@ -165,7 +165,7 @@ p_network_props <-
   ggplot(aes(prop_roi, network, fill = is_roi)) +
   geom_bar(color = "black", width = 0.6, stat = "identity") +
   geom_text(
-    aes(label = paste0(n_roi, "/", n_parcel), y = network, x = prop_roi + 0.002),
+    aes(label = paste0(n_roi, "/", n_parcel), y = network, x = prop_roi + 0.004),
     hjust = 0,
     color = "black",
     size = 1.75
@@ -413,7 +413,7 @@ p_quadrants_scatter <-
     ),
     aes(label = paste0(quadrant, "\nN = ", n)),
     size = 3,
-    color = "black"
+    color = "grey50"
   ) +
   geom_point(
     aes(color = tplus, shape = is_example_region, alpha = is_example_region, stroke = is_example_region),
@@ -480,10 +480,10 @@ p_ratio <-
   d_ratio_vs_sdtrr %>%
   arrange(tplus) %>%
   ggplot(aes(delta_ratio, delta_sd)) +
-  geom_hline(yintercept = 0, linetype = "dotted", color = "grey50") +
-  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50")  +
-  geom_abline(linetype = "dotted", color = "grey50")  +
-  stat_ellipse(type = "t", linetype = "dotted", color = "grey50") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50")  +
+  geom_abline(linetype = "dashed", color = "grey50")  +
+  stat_ellipse(type = "t", linetype = "dashed", color = "grey50") +
   geom_point(aes(color = tplus), shape = 16, size = 2, stroke = 0, alpha = 1) +
   labs(
     x = "\u0394Variab. Ratio (log)",

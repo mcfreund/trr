@@ -243,12 +243,12 @@ plot_scatter <- function(
     ungroup %>%
     arrange({{ color_sym }}) %>%
     ggplot(aes(.data[[x_col]], .data[[y_col]])) +
-    geom_abline(linetype = linetype)
+    geom_abline(linetype = linetype, color = "grey50")
   
   if (add_zero_lines) {
     p <- p +
-      geom_vline(xintercept = 0, linetype = linetype) +
-      geom_hline(yintercept = 0, linetype = linetype)
+      geom_vline(xintercept = 0, linetype = linetype, color = "grey50") +
+      geom_hline(yintercept = 0, linetype = linetype, color = "grey50")
   }
   
   p <- p +

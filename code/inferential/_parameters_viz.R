@@ -108,20 +108,25 @@ stat_names <- c(
 ## color scales
 
 colors_network8 <- setNames(legend_network8$color, legend_network8$network)
-colors_response <- setNames(diverging_hcl(10, palette = "Purple-Brown")[c(2, 9)], c("rda", "uv"))
+colors_response <- c(uv = "#E0AF3D", rda = "#6C59A8")
 colors_models2 <- c(summarystat = "grey40", no_lscov_symm = "firebrick")
 colors_models <- setNames(
   sequential_hcl(5, palette = "Purple-Blue"),
   c("full", "no_lscov", "no_lscov_symm", "fixed_sigma", "summarystat"))
-colors_models_comparison <- c(no_lscov_symm = "#D306CD", summarystat = "#21D1FE")
+# colors_models_comparison <- setNames(
+#   colorspace::diverging_hcl(10, palette = "tropic")[c(1, 10)],
+#   c("no_lscov_symm", "summarystat")
+#   )
+
+colors_models_comparison <- c(no_lscov_symm = "#108184", summarystat = "#C75DAA")
 colors_roi <- c("TRUE" = "firebrick", "FALSE" = "grey60")
 colors_nois <- c(
   ContA = "firebrick", ContB = "firebrick", DorsAttnA = "firebrick",
   DorsAttnB = "firebrick", other = "grey60"
 )
 color_line_roi <- c("TRUE" = "white", "FALSE" = "black")
-
-
+#"#16878A"
+#2B7D80
 ## sizes
 axis_text_x_angle <- 30
 size_line_roi <- c("TRUE" = 0.3, "FALSE" = 0.2)

@@ -11,7 +11,7 @@ if (Sys.info()["nodename"] == "puter2") {
 
 }
 
-path_reliab <- here("out", "inferential", atlas_nm)
+path_reliab <- here::here("out", "inferential", atlas_nm)
 
 path_figs <- here::here("figs")
 path_figs_results <- file.path(path_figs, "main_results")
