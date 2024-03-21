@@ -221,7 +221,7 @@ plot_hist_diff <- function(
 
 plot_scatter <- function(
   data, x_col, y_col, color_col, axis_labs,
-  linetype = "dashed",
+  linetype = "dotted",
   alpha_level = 0.75,
   point_size = 1,
   breaks_x = c(-1, 0, 1),

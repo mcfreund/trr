@@ -391,8 +391,8 @@ p_quadrants_scatter <-
   mutate(is_example_region = region %in% eg) %>%
   arrange(is_example_region, tplus) %>%
   ggplot(aes(delta_sd, delta_loc)) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  geom_vline(xintercept = 0, linetype = "dashed")  +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50")  +
   geom_text(
     data = d_ctab %>% 
       group_by(quadrant) %>%
@@ -480,10 +480,10 @@ p_ratio <-
   d_ratio_vs_sdtrr %>%
   arrange(tplus) %>%
   ggplot(aes(delta_ratio, delta_sd)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey50")  +
-  geom_abline(linetype = "dashed", color = "grey50")  +
-  stat_ellipse(type = "t", linetype = "dashed", color = "grey50") +
+  geom_hline(yintercept = 0, linetype = "dotted", color = "grey50") +
+  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50")  +
+  geom_abline(linetype = "dotted", color = "grey50")  +
+  stat_ellipse(type = "t", linetype = "dotted", color = "grey50") +
   geom_point(aes(color = tplus), shape = 16, size = 2, stroke = 0, alpha = 1) +
   labs(
     x = "\u0394Variab. Ratio (log)",
@@ -536,7 +536,7 @@ ggsave(
   dev = cairo_pdf, width = one_column_width, height = one_column_width*0.95,
   units = "mm"
 )
-
+  
 
 
 ## weight vector analysis ----
