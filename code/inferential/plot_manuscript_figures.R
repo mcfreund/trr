@@ -13,6 +13,8 @@ library(ggseg)
 library(ggsegExtra)
 library(ggsegSchaefer)
 library(patchwork)
+library(knitr)
+library(kableExtra)
 
 source(here("code", "inferential", "_parameters_viz.R"))
 source(here("code", "inferential", "_parameters_reliability.R"))
@@ -57,8 +59,15 @@ summarystats <- load_summaries(
   models_order = NULL
 )
 
+noiseprojs <- readRDS(
+  here(
+    "out", "spatial",
+    "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_resample1_baseline.RDS"
+  )
+)
 
-## minor computations ----
+
+## minor computations and formatting for plotting ----
 
 ## get population stats and ROIs columns
 
@@ -92,22 +101,73 @@ popef_network <- popef %>%
     prop_roi = mean(is_roi)
   )
 
+## format weight-vector data
 
-## format for plotting ----
+noiseprojs[, proj_mv_relvar := abs(proj_mv_relvar)]
+noiseprojs[, proj_uv_relvar := abs(proj_uv_relvar)]
+noiseprojs[, proj_uv_absvar := abs(proj_uv_relvar)*var_total]
+noiseprojs[, proj_mv_absvar := abs(proj_mv_relvar)*var_total]
+noiseprojs[, var_dim_uv := proj_uv_absvar / proj_uv_scaled]  ## variance per dimension
+noiseprojs[, var_dim_mv := proj_mv_absvar / proj_rda_scaled]
+stopifnot(all.equal(noiseprojs$var_dim_uv, noiseprojs$var_dim_mv))  ## check for equality
+noiseprojs <- noiseprojs %>%
+  rename(var_dim = var_dim_mv, region = roi) %>%
+  mutate(var_dim_uv = NULL)
 
-## reorder popef:
-popef <- popef %>% 
+
+## reorder popef
+
+popef <- popef %>%
   mutate(network = factor(network, levels = popef_network$network[order(popef_network$q05)]))
 popef_network <- popef_network %>%
   mutate(network = factor(network, levels = popef_network$network[order(popef_network$q05)]))
 
-## create dataframes for each plot:
 uv_mv_icc_hbm <-
   bind_rows(
     summarystats$trr %>% rename(value = r) %>% mutate(sum_fun = "pointest", statistic = "trr"),
     posterior_summaries$trr
   ) %>%
   full_join(popef %>% select(region, tplus, q05, is_roi), by = "region")
+
+## change in SD(TRR) in multiv vs univ contrasts
+
+hbm_vs_icc <-
+  uv_mv_icc_hbm[response == "rda" & sum_fun %in% c("map", "pointest")] %>%
+  pivot_and_contrast(
+    contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
+    id_cols = c("region", "is_roi", "tplus"),
+    names_from = "model_nm",
+    values_from = "value",
+    new_col = "delta_loc"
+  )
+
+## change in TRR in HBM versus SumStat estimates
+
+uv_vs_mv <-
+  posterior_summaries$trr[sum_fun == "sd"] %>%
+  pivot_and_contrast(
+    contrast = "log(uv) - log(rda)",
+    id_cols = "region",
+    names_from = "response",
+    values_from = "value",
+    new_col = "delta_sd"
+  )
+d <- full_join(hbm_vs_icc, uv_vs_mv)
+
+## change in variability ratio, multivariate - univariate
+
+response_ratio <-
+  posterior_summaries$ratio[statistic == "ratio" & sum_fun == "map"] %>%
+  pivot_and_contrast(
+    contrast = "ratio_uv - ratio_rda",
+    id_cols = "region",
+    names_from = "response",
+    values_from = "value",
+    new_col = "delta_ratio",
+    names_prefix = "ratio_"
+  )
+d_ratio_vs_sdtrr <- full_join(response_ratio, d, by = c("region"))
+
 
 
 ## population-level contrast on univariate response ----
@@ -278,28 +338,6 @@ ggsave(
 
 ## scatterplot panel
 
-## change in SD(TRR) in multiv vs univ contrasts (x axis):
-hbm_vs_icc <-
-  uv_mv_icc_hbm[response == "rda" & sum_fun %in% c("map", "pointest")] %>%
-  pivot_and_contrast(
-    contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
-    id_cols = c("region", "is_roi", "tplus"),
-    names_from = "model_nm",
-    values_from = "value",
-    new_col = "delta_loc"
-  )
-## change in TRR in HBM versus SumStat estimates (y axis):
-uv_vs_mv <-
-  posterior_summaries$trr[sum_fun == "sd"] %>%
-  pivot_and_contrast(
-    contrast = "log(uv) - log(rda)",
-    id_cols = "region",
-    names_from = "response",
-    values_from = "value",
-    new_col = "delta_sd"
-  )
-d <- full_join(hbm_vs_icc, uv_vs_mv)
-
 ## contingincy table:
 d_ctab <- d %>%
   mutate(sign_delta_loc = sign(delta_loc), sign_delta_sd = sign(delta_sd)) %>%
@@ -451,31 +489,6 @@ ggsave(
 
 ## association between SD(TRR) and reduction in trial-level noise ----
 
-
-## xaxis: change in variability ratio, multivariate - univariate
-response_ratio <-
-  posterior_summaries$ratio[statistic == "ratio" & sum_fun == "map"] %>%
-  pivot_and_contrast(
-    contrast = "ratio_uv - ratio_rda",
-    id_cols = "region",
-    names_from = "response",
-    values_from = "value",
-    new_col = "delta_ratio",
-    names_prefix = "ratio_"
-  )
-## yaxis: change in sd(TRR), multivariate - univariate
-# response_sdtrr <-
-#   posterior_summaries$trr[sum_fun == "sd"] %>%
-#   pivot_and_contrast(
-#     contrast = "log(sdtrr_uv) - log(sdtrr_rda)",
-#     id_cols = "region",
-#     names_from = "response",
-#     values_from = "value",
-#     new_col = "delta_sd",
-#     names_prefix = "sdtrr_"
-#   )
-d_ratio_vs_sdtrr <- full_join(response_ratio, d, by = c("region"))
-
 p_ratio <-
   d_ratio_vs_sdtrr %>%
   arrange(tplus) %>%
@@ -541,21 +554,6 @@ ggsave(
 
 ## weight vector analysis ----
 
-noiseprojs <- readRDS(
-  here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_resample1_baseline.RDS")
-)
-noiseprojs[, proj_mv_relvar := abs(proj_mv_relvar)]
-noiseprojs[, proj_uv_relvar := abs(proj_uv_relvar)]
-noiseprojs[, proj_uv_absvar := abs(proj_uv_relvar)*var_total]
-noiseprojs[, proj_mv_absvar := abs(proj_mv_relvar)*var_total]
-noiseprojs[, var_dim_uv := proj_uv_absvar / proj_uv_scaled]  ## variance per dimension
-noiseprojs[, var_dim_mv := proj_mv_absvar / proj_rda_scaled]
-stopifnot(all.equal(noiseprojs$var_dim_uv, noiseprojs$var_dim_mv))  ## check for equality
-
-noiseprojs <- noiseprojs %>%
-  rename(var_dim = var_dim_mv, region = roi) %>%
-  mutate(var_dim_uv = NULL)
-
 ## example ROI
 region_noiseproj <- "17Networks_LH_ContA_PFCd_1"
 noiseprojs_eg <- noiseprojs[region == region_noiseproj]
@@ -618,3 +616,58 @@ ggsave(
   dev = cairo_pdf, width = two_column_width, height = two_column_width/2.5,
   units = "mm"
 )
+
+
+
+## tables ----
+
+# all_summaries <- rbindlist(posterior_summaries, idcol = "statistic_type")
+# posterior_summaries$trr[
+#   model_nm %in% c("summarystat", "no_lscov_symm") & sum_fun %in% c("MAP", "mean", "q05")
+# ]
+# posterior_summaries$trr[
+#   model_nm %in% c("summarystat", "no_lscov_symm") & sum_fun %in% c("MAP", "mean", "q05")
+# ]
+
+table_trr <-
+  posterior_summaries$trr[sum_fun %in% c("pointest", "map", "mean", "q05", "sd")] %>%
+  bind_rows(summarystats$trr %>% rename(value = r) %>% mutate(sum_fun = "pointest", statistic = "trr")) %>%
+  pivot_wider(id_cols = c("region"), names_from = c(response, sum_fun), values_from = "value", names_prefix = "trr_") %>%
+  full_join(popef %>% select(popef_q05 = q05, popef_tplus = tplus, is_roi, region, network), by = "region") %>%
+  mutate(
+    region_lab = label_regions(region),
+    is_core35 = region %in% rois[core32]
+  ) %>%
+  filter(is_roi)  %>%
+  arrange(-popef_tplus) %>%
+  mutate(region_lab = paste0(region_lab, case_when(is_core35 ~ "*", TRUE ~ ""))) %>%
+  select(
+    region_lab, popef_tplus,
+    trr_uv_map, trr_uv_q05, trr_uv_pointest,
+    trr_rda_map, trr_rda_q05, trr_rda_pointest
+  ) %>%
+  mutate(across(where(is.numeric), \(x) round(x, 2)))
+
+names(table_trr) <- c(
+  "Parcel (Schaefer 400-17)",
+  "$t^+$",
+  "MAP",
+  "5\\%ile",
+  "ICC",
+  "MAP",
+  "5\\%ile",
+  "ICC"
+)
+header <- c(" " = 2, "Univariate TRR" = 3, "Multivariate TRR" = 3)
+latex_table <-
+  table_trr %>%
+  kable("latex", booktabs = TRUE, escape = FALSE) %>%
+  kable_styling(full_width = FALSE) %>%
+  add_header_above(header) %>%
+  ## remove first two and last lines, which define table environment
+  ## do this in latex, so caption can be written there as well.
+  strsplit("\n") %>%
+  unlist %>%
+  .[-c(1, 2, length(.))] %>%
+  paste0(collapse = "\n")
+writeLines(latex_table, file.path(path_figs_results, "table_trr.tex"))
