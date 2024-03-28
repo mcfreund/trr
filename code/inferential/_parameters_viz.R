@@ -125,15 +125,15 @@ colors_nois <- c(
   DorsAttnB = "firebrick", other = "grey60"
 )
 color_line_roi <- c("TRUE" = "white", "FALSE" = "black")
-#"#16878A"
-#2B7D80
+color_cosine_sim <- setNames(sequential_hcl(7, "Blues 3")[2:4], c("proj_uv_scaled", "axis", "proj_rda_scaled"))
+
 ## sizes
 axis_text_x_angle <- 30
 size_line_roi <- c("TRUE" = 0.3, "FALSE" = 0.2)
 two_column_width <- 183  ## mm
 one_column_width <- 89  ## mm
 oneandhalf_column_width <- 120 ## mm
-
+weight_vector_coeff <- 2.6
 
 ## components of main figures
 

@@ -407,7 +407,7 @@ p_quadrants_density <-
     #strip.text = element_text(size = 6),
     axis.line.y.left = element_blank()
   ) +
-  labs(x = "TRR", y = "posterior density") +
+  labs(x = "Test\U2012retest reliability (r)", y = "posterior density") +
   scale_x_continuous(limits = c(-1, 1), breaks = c(-1, 0, 1)) +
   scale_y_continuous(breaks = 0) +
   geom_text(
@@ -462,7 +462,7 @@ p_quadrants_scatter <-
   scale_alpha_manual(values = c("TRUE" = 4/5, "FALSE" = 3/4)) +
   labs(
     x = "\U0394Precision(TRR): multivar. \U2212 univar.\n(log)",
-    y = "\U0394Mode(TRR): multivar. \U2212 univar.\n(z difference)",
+    y = "\U0394Multivar. TRR: MAP \U2212 ICC\n(z difference)",
     color = bquote("t"^"+")
   ) +
   guides(shape = "none", alpha = "none", color = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
@@ -484,7 +484,93 @@ ggsave(
 )
 
 
+## weight vector analysis ----
 
+## example ROI
+
+region_noiseproj <- "17Networks_LH_ContA_PFCd_1"
+noiseprojs_eg <- noiseprojs[region == region_noiseproj]
+
+p_alignment_eg <-
+  noiseprojs_eg %>%
+  melt(measure.vars = c("proj_uv_scaled", "proj_rda_scaled")) %>%
+  group_by(subj, region, dimension, variable) %>%
+  summarize(
+    cosine_sim = tanh(mean(atanh(value))),
+    sd_dim = mean(sqrt(var_dim))
+  ) %>% 
+  ggplot(aes(x = dimension)) +
+  stat_summary(aes(y = sd_dim), geom = "point", fun = "mean", size = 1/3) +
+  stat_summary(aes(y = sd_dim), geom = "line", fun = "mean", linewidth = 1/3) +
+  stat_summary(aes(y = sd_dim), geom = "errorbar", fun.data = "mean_cl_boot", width = 0, linewidth = 1/3) +
+  stat_summary(
+    aes(y = cosine_sim * weight_vector_coeff, group = variable, color = variable),
+    geom = "point", fun = "mean", size = 1/3
+  ) +
+  stat_summary(
+    aes(y = cosine_sim * weight_vector_coeff, group = variable, color = variable),
+    geom = "line", fun = "mean", linewidth = 1/3
+  ) +
+  stat_summary(
+    aes(y = cosine_sim * weight_vector_coeff, group = variable, color = variable),
+    geom = "errorbar", fun.data = "mean_cl_boot", width = 0, linewidth = 1/3
+  ) +
+  scale_y_continuous(
+    name = "SD(trial-level noise)",
+    sec.axis = sec_axis(~ . / weight_vector_coeff, name = "Alignment to component \n(cosine similarity)")
+  ) +
+  scale_x_continuous(trans = "log", breaks = c(1, 2, 4, 8, 16, 32, 58)) +
+  scale_color_manual(values = color_cosine_sim) +
+  annotate(
+    geom = "text", x = 1.3, y = 1.3, label = expression("w"["univar."]), color = color_cosine_sim["proj_uv_scaled"]
+  ) +
+  annotate(
+    geom = "text", x = 1.3, y = 0.3, label = expression('w'['multivar.']), color = color_cosine_sim["proj_rda_scaled"]
+  ) +
+  theme(
+    axis.line.y.right = element_line(color = color_cosine_sim["axis"]),
+    axis.title.y.right = element_text(color = color_cosine_sim["axis"]),
+    axis.text.y.right = element_text(color = color_cosine_sim["axis"]),
+    axis.ticks.y.right = element_line(color = color_cosine_sim["axis"]),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  labs(x = "Trial-level noise\ncomponent (log scale)",
+  title = label_regions(region_noiseproj)
+  )
+
+## stats on all parcels*subjects
+p_totalnoise <-
+  noiseprojs[, c("region", "subj", "wave", "dimension", "proj_uv_absvar", "proj_mv_absvar")] %>%
+  ## get total SD (sum SDs over dimensions):
+  group_by(subj, region, wave) %>%
+  summarize(
+    proj_mv_absvar = mean(sqrt(proj_mv_absvar)),
+    proj_uv_absvar = mean(sqrt(proj_uv_absvar))
+  ) %>%
+  ## convert to units SD then get log ratio: univariate - multivariate total var:
+  mutate(delta_absvar = log(proj_uv_absvar / proj_mv_absvar)) %>%
+  ## average over waves:
+  group_by(subj, region) %>%
+  summarize(delta_absvar = mean(delta_absvar)) %>%
+  ggplot(aes(delta_absvar)) +
+  geom_histogram(position = "identity", alpha = 0.5, color = "black", bins = 20) +
+  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50") +
+  labs(
+    x = "\U0394Total aligned trial-level variab.:\nunivar. \U2212 multivar. (log)",
+    y = "Number of parcels*subjects",
+    title = "All parcels*subjects"
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p_alignment <- p_alignment_eg + p_totalnoise
+
+ggsave(
+  file.path(path_figs_results, "noise_alignment.pdf"),
+  p_alignment,
+  dev = cairo_pdf, width = two_column_width, height = two_column_width/2.5,
+  units = "mm"
+)
 
 
 ## association between SD(TRR) and reduction in trial-level noise ----
@@ -514,7 +600,9 @@ p_ratio <-
   scale_y_continuous(limits = c(-1.4, 1.4)) +
   scale_x_continuous(limits = c(-1.3, 1.3)) +
   annotate(
-    geom = "text", x = 0, y = -1.2, size = 3, label = "trial-level\nvariability", color = "grey50", fontface = "bold"
+    geom = "text", x = 0, y = -1.2, size = 3,
+    color = "grey50", fontface = "bold",
+    label = expression(atop(bold(frac(trial,subject)), bold("variability")))
   ) +
   annotate(geom = "text", x = 1, y = -1.2, size = 3, label = "higher in\nunivariate", color = "grey50") +
   annotate(geom = "text", x = -1, y = -1.2, size = 3, label = "higher in\nmultivariate", color = "grey50") +
@@ -548,86 +636,10 @@ ggsave(
   p_ratio,
   dev = cairo_pdf, width = one_column_width, height = one_column_width*0.95,
   units = "mm"
-)
-  
-
-
-## weight vector analysis ----
-
-## example ROI
-region_noiseproj <- "17Networks_LH_ContA_PFCd_1"
-noiseprojs_eg <- noiseprojs[region == region_noiseproj]
-
-p_spectrum <- 
-  noiseprojs_eg[, .(var_dim = mean(var_dim)), by = c("subj", "region", "dimension")] %>%
-  ggplot(aes(x = dimension)) +
-  stat_summary(aes(y = var_dim), geom = "point", fun = "mean", size = 1/3) +
-  stat_summary(aes(y = var_dim), geom = "errorbar", fun.data = "mean_cl_boot", width = 0) +
-  labs(y = "SD(trial-level noise)", x = "Trial-level noise\ncomponent")
-
-p_cossim <-
-  noiseprojs_eg %>%
-  melt(measure.vars = c("proj_uv_scaled", "proj_rda_scaled")) %>%
-  group_by(subj, region, dimension, variable) %>%
-  summarize(cosine_sim = tanh(mean(atanh(value)))) %>%
-  ggplot(aes(x = dimension)) +
-  stat_summary(aes(y = cosine_sim, color = variable), geom = "point", fun = "mean", size = 1/3) +
-  stat_summary(aes(y = cosine_sim, color = variable), geom = "errorbar", fun.data = "mean_cl_boot", width = 0) +
-  labs(y = "Alignment\n(cosine similarity)", x = "Trial-level noise\ncomponent") +
-  theme(legend.position = "none")
-
-
-## stats on all parcels*subjects
-p_totalnoise <- 
-  noiseprojs[, c("region", "subj", "wave", "dimension", "proj_uv_absvar", "proj_mv_absvar")] %>%
-  ## get total var (sum over dimensions):
-  group_by(subj, region, wave) %>%
-  summarize(proj_mv_absvar = sum(proj_mv_absvar), proj_uv_absvar = sum(proj_uv_absvar)) %>%
-  ## convert to units SD then get log ratio: univariate - multivariate total var:
-  mutate(delta_absvar = log(sqrt(proj_uv_absvar) / sqrt(proj_mv_absvar))) %>%
-  ## average over waves:
-  group_by(subj, region) %>%
-  summarize(delta_absvar = mean(delta_absvar)) %>%
-  ggplot(aes(delta_absvar)) +
-  geom_histogram(position = "identity", alpha = 0.5, color = "black", bins = 20) +
-  labs(
-    x = "\U0394Total trial-level variab.:\nunivar. \U2212 multivar. (log)",
-    y = "Number of parcels*subjects") +
-  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50")
-
-
-p_alignment_eg <-
-  p_spectrum + p_cossim +
-  plot_annotation(
-    title = label_regions(region_noiseproj),
-    theme = theme(plot.title = element_text(hjust = 0.5))
-)
-p_alignment_all <- p_totalnoise +
-  plot_annotation(
-    title = "All parcels*subjects",
-    theme = theme(plot.title = element_text(hjust = 0.5))
-)
-
-p_alignment <- wrap_elements(p_alignment_eg) + wrap_elements(p_alignment_all) + plot_layout(widths = c(2, 1))
-
-ggsave(
-  file.path(path_figs_results, "noise_alignment.pdf"),
-  p_alignment,
-  dev = cairo_pdf, width = two_column_width, height = two_column_width/2.5,
-  units = "mm"
-)
-
+)  
 
 
 ## tables ----
-
-# all_summaries <- rbindlist(posterior_summaries, idcol = "statistic_type")
-# posterior_summaries$trr[
-#   model_nm %in% c("summarystat", "no_lscov_symm") & sum_fun %in% c("MAP", "mean", "q05")
-# ]
-# posterior_summaries$trr[
-#   model_nm %in% c("summarystat", "no_lscov_symm") & sum_fun %in% c("MAP", "mean", "q05")
-# ]
 
 table_trr <-
   posterior_summaries$trr[sum_fun %in% c("pointest", "map", "mean", "q05", "sd")] %>%
@@ -671,3 +683,4 @@ latex_table <-
   .[-c(1, 2, length(.))] %>%
   paste0(collapse = "\n")
 writeLines(latex_table, file.path(path_figs_results, "table_trr.tex"))
+
