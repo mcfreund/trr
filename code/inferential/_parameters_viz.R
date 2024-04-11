@@ -126,6 +126,8 @@ colors_nois <- c(
 )
 color_line_roi <- c("TRUE" = "white", "FALSE" = "black")
 color_cosine_sim <- setNames(sequential_hcl(7, "Blues 3")[2:4], c("proj_uv_scaled", "axis", "proj_rda_scaled"))
+linetype_response <- c(uv = "dashed", rda = "solid")
+response_labels <- c(uv = "Univariate", rda = "Multivariate")
 
 ## sizes
 axis_text_x_angle <- 30
@@ -133,7 +135,7 @@ size_line_roi <- c("TRUE" = 0.3, "FALSE" = 0.2)
 two_column_width <- 183  ## mm
 one_column_width <- 89  ## mm
 oneandhalf_column_width <- 120 ## mm
-weight_vector_coeff <- 2.6
+weight_vector_coeff <- 4
 
 ## components of main figures
 
@@ -256,7 +258,7 @@ params_comparison_plots <- list(
       alpha_col = NULL,
       underlay = NULL,
       #limits = c(-2, 1),
-      #breaks = c(-1, 0, 1),
+      breaks = c(-1.6, -1, -0.4),
       fill_label = "Precision(TRR) =\n1/(log SD(TRR))"
     ),
     params_plot_hist_means = list(

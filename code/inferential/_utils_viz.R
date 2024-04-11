@@ -27,6 +27,23 @@ highlight_overlay <- function(
 }
 
 
+create_colorgrid <- function(
+  colorscale, limits_color_stat, limits_alpha_stat,
+  n = 50,
+  ...
+) {
+  color_stat <- seq(limits_color_stat[1], limits_color_stat[2], length.out = n)
+  alpha_stat <- seq(limits_alpha_stat[1], limits_alpha_stat[2], length.out = n)
+  clrs <- colorscale$map(color_stat)
+  colorgrid <- expand.grid(color = clrs, alpha_stat = alpha_stat)
+  color_stat <- setNames(color_stat, clrs)
+  colorgrid$color_stat <- color_stat[colorgrid$color]
+  colorgrid$alpha <- highlight_overlay(colorgrid$alpha_stat, ...)
+  as_tibble(colorgrid)
+}
+
+
+
 label_regions <- function(labels, width = 18) {
   labels <- gsub("17Networks_", "", labels) %>% gsub("_", " ", .)
   labels <- stringr::str_wrap(labels, width = width)
@@ -393,4 +410,5 @@ arrange_figure_comparison <- function(
   )
 
 }
+
 

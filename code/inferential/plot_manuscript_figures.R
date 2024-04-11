@@ -76,8 +76,9 @@ popef <-
   filter(response == "uv", sum_fun %in% c("mean", "sd", "map", "q05")) %>%
   dcast(... ~ sum_fun, value.var = "value") %>%
   mutate(
-    is_roi = quantile(q05, 0.9) < q05,
+    is_roi = region %in% dmcc35_nms,
     tplus = mean / sd,
+    is_roi_q05 = quantile(q05, 0.9) < q05,
     is_roi_mean = quantile(mean, 0.9) < mean,
     is_roi_map = quantile(map, 0.9) < map,
     is_roi_tplus = quantile(tplus, 0.9) < tplus,
@@ -183,7 +184,8 @@ p_pop_brain_unthresh <-
   ) +
   labs(fill = univ_stat_lab) +
   theme(legend.position = c(0.5, 0))
-ggsave(file.path(path_figs_results_supp, "pop_tplus_unthresh.pdf"), p_pop_brain_unthresh, height = 2, width = 4.5)
+ggsave(file.path(path_figs_results, "pop_tplus_unthresh.pdf"), p_pop_brain_unthresh, height = 2, width = 4.5)
+#ggsave(file.path(path_figs_results_supp, "pop_tplus_unthresh.pdf"), p_pop_brain_unthresh, height = 2, width = 4.5)
 
 ## check stats within network assignments
 
@@ -193,7 +195,8 @@ p_parcel_q05 <-
   popef %>%
   ggplot(aes(q05, fill = is_roi)) +
   geom_histogram(bins = 30) +
-  geom_vline(xintercept = quantile(popef$q05, 0.9)) +
+  #geom_vline(xintercept = quantile(popef$q05, 0.9)) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
   labs(x = "Population-level univariate\nStroop contrast (5%ile)", y = "Number of parcels") +
   annotate(
     geom = "text", x = thresh_roi + 0.005, y = 30, label = "'ROI'", color = colors_roi[["TRUE"]], size = 3,
@@ -206,7 +209,8 @@ p_parcel_q05 <-
 p_network_q05 <-
   popef %>%
   ggplot(aes(q05, network)) +
-  geom_vline(xintercept = thresh_roi) +
+  #geom_vline(xintercept = thresh_roi) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
   geom_boxplot(fill = "grey", color = "black", width = 0.5) +
   theme(
     axis.line.y.left = element_blank(),
@@ -231,7 +235,7 @@ p_network_props <-
     size = 1.75
   ) +
   scale_fill_manual(values = colors_roi) +
-  scale_x_continuous(limits = c(0, 0.5), breaks = c(0, 0.25, 0.5)) +
+  scale_x_continuous(limits = c(0, 0.55), breaks = c(0, 0.25, 0.5)) +
   theme(
     axis.line.y.left = element_blank(),
     axis.text.y = element_text(size = rel(0.75)),
@@ -248,7 +252,7 @@ ggsave(
 p_uv <- arrange_plots(
   p_pop_brain_unthresh,
   p_parcel_q05 + p_network_q05 + p_network_props,
-  filename = "pop_uv",
+  filename = "supp/pop_uv",
   path = path_figs_results,
   plot_layout = c(
     area(t = 1, b = 62, l = 1, r = 220),
@@ -277,6 +281,19 @@ for (plot_i in seq_along(params_comparison_plots)) {
 
 ## TRR thresholded: univariate versus multivariate ----
 
+## set params:
+
+## parcels with trr > upper: full opacity
+## parcels with trr < upper but > lower: linear function btw 0.1 and 1
+## parcels with trr < lower: 0.1
+highlight_pars <- list(
+  upper = 0, lower = -1, lower_alpha = 0.2,
+  scaling_fun = \(x) x^2
+)
+color_scale <- scale_fill_viridis_c(
+  option = "magma", na.value = "white", oob = scales::squish, limits = c(0, 1), breaks = c(0, 0.5, 1)
+)
+
 data <- full_join(
   uv_mv_icc_hbm %>% filter(sum_fun == "mean") %>% select(-sum_fun),
   uv_mv_icc_hbm %>%
@@ -284,8 +301,12 @@ data <- full_join(
     select(-sum_fun) %>%
     group_by(response) %>%
     mutate(
-      lb = value,
-      alpha_trr = highlight_overlay(value, upper = 0, lower = -0.5, lower_alpha = 0.1),
+      trr_q05 = value,
+      alpha_trr = highlight_overlay(
+        value, upper = highlight_pars$upper, lower = highlight_pars$lower,
+        lower_alpha = highlight_pars$lower_alpha,
+        scaling_fun = highlight_pars$scaling_fun
+        ),
       value = NULL
     )
 )
@@ -294,20 +315,18 @@ data <- full_join(
 if (FALSE) {
   data %>%
     arrange(response, alpha_trr) %>%
-    ggplot(aes(lb, alpha_trr)) +
+    ggplot(aes(trr_q05, alpha_trr)) +
     geom_point() +
     facet_wrap(~response)
 }
 
 wrapped_labs <- stringr::str_wrap(comparison_factor_labs$uv_mv, width = 7)
 names(wrapped_labs) <- names(comparison_factor_labs$uv_mv)
-p_trr_thresh_brains <-
-  data %>%
+p_trr_thresh_brains <- data %>%
   plot_surface(
     statistic_col = "value",
-    underlay = c(color = "grey", fill = "white"),
-    limits = c(-0.5, 1),
-    breaks = c(0, 0.5, 1),
+    underlay = c(color = "grey50", fill = "grey50"),
+    #border_size_values = c(`TRUE` = 0.5, `FALSE` = 0.1),
     alpha_col = "alpha_trr",
     facet_factor = "response",
     facet_factor_order = wrapped_labs,
@@ -315,7 +334,8 @@ p_trr_thresh_brains <-
     guides_ = guides(
       fill = guide_colorbar(title.position = "top", title.vjust = 0.9),
       color = "none", size = "none"
-    )
+    ),
+    scale_fill = \(...) color_scale
   ) +
   theme(
     legend.position = c(0.25, -0.1),
@@ -324,8 +344,44 @@ p_trr_thresh_brains <-
   labs(
     caption = "fully opaque parcels have 5%ile(TRR) > 0   "
   )
+
+colorgrid <- create_colorgrid(
+  colorscale = color_scale,
+  limits_color_stat = color_scale$limits,
+  limits_alpha_stat = c(-1, 1),
+  upper = highlight_pars$upper,
+  lower = highlight_pars$lower,
+  lower_alpha = highlight_pars$lower_alpha,
+  scaling_fun = highlight_pars$scaling_fun,
+  n = 101
+)
+colorscale <- colorgrid %>%
+  filter(alpha_stat <= 0.5) %>%
+  ggplot(aes(as.factor(color_stat), as.factor(alpha_stat))) +
+  geom_raster(fill = "grey50") +
+  geom_raster(aes(fill = color, alpha = alpha)) +
+  scale_fill_identity() +
+  scale_color_identity() +
+  scale_alpha_identity() +
+  scale_y_discrete(breaks = c(-1, -0.5, 0, 0.5), labels = c("-1", "-0.5", "0", ">0")) +
+  scale_x_discrete(breaks = c(0, 0.5, 1), labels = c("<=0", "0.5", "1")) +
+  labs(x = "Mean TRR (r)", y = "5%ile TRR (r)") +
+  theme(
+    axis.line.x.bottom = element_blank(), axis.line.y.left = element_blank(), axis.title = element_text(size = 4),
+    axis.text = element_text(size = 4),
+    axis.ticks = element_line(linewidth = 1/4, color = "grey40"),
+    plot.margin = unit(c(1, 1, 1, 1), "mm")
+  )
 ggsave(
-  file.path(path_figs_results, "trr_thresh.pdf"),
+  file.path(path_figs_results, "trr_thresh_new_colorscale.pdf"),
+  colorscale,
+  width = 20,
+  height = 15,
+  units = "mm"
+)
+
+ggsave(
+  file.path(path_figs_results, "trr_thresh_new.pdf"),
   p_trr_thresh_brains,
   width = oneandhalf_column_width,
   height = 55,
@@ -385,10 +441,22 @@ for (q in seq_along(examples)) {
 
 eg <- c(
   "17Networks_LH_ContA_IPS_2",
-  "17Networks_LH_ContA_PFCd_1",
+  "17Networks_RH_ContA_PFCl_3",
   "17Networks_RH_LimbicB_OFC_3",
   "17Networks_RH_SomMotB_S2_8"
 )
+
+if (FALSE) {
+  ## have a look at anatomical locations:
+  data_eg <- uv_mv_icc_hbm %>% filter(sum_fun == "mean", response == "rda") %>% mutate(value = ifelse(region %in% eg, 1, NA))
+  plot_surface(
+    data = data_eg,
+    statistic = "value",
+    underlay = NULL,
+    alpha_col = NULL
+  )
+}
+
 
 p_quadrants_density <-
   posterior_samples$trr[region %in% eg] %>%
@@ -431,31 +499,31 @@ p_quadrants_scatter <-
   ggplot(aes(delta_sd, delta_loc)) +
   geom_hline(yintercept = 0, linetype = "dotted", color = "grey50") +
   geom_vline(xintercept = 0, linetype = "dotted", color = "grey50")  +
+  geom_point(
+    aes(color = tplus, shape = is_example_region, alpha = is_example_region, stroke = is_example_region),
+    size = 1.5
+  ) +
   geom_text(
     data = d_ctab %>% 
       group_by(quadrant) %>%
       summarize(n = sum(n)) %>%
       mutate(
         delta_sd = case_when(
-          quadrant == "q1" ~ -0.7,
-          quadrant == "q2" ~ 1,
-          quadrant == "q3" ~ -0.7,
+          quadrant == "q1" ~ -0.6,
+          quadrant == "q2" ~ 0.55,
+          quadrant == "q3" ~ -0.6,
           quadrant == "q4" ~ 1
         ),
         delta_loc = case_when(
-          quadrant == "q1" ~ 1.8,
-          quadrant == "q2" ~ 1.8,
+          quadrant == "q1" ~ 2,
+          quadrant == "q2" ~ 2,
           quadrant == "q3" ~ -0.5,
           quadrant == "q4" ~ -0.5
         ),
     ),
-    aes(label = paste0(quadrant, "\nN = ", n)),
+    aes(label = paste0(quadrant, ", N = ", n)),
     size = 3,
     color = "grey50"
-  ) +
-  geom_point(
-    aes(color = tplus, shape = is_example_region, alpha = is_example_region, stroke = is_example_region),
-    size = 1.5
   ) +
   scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6)) +
   scale_shape_manual(values = c("TRUE" = 8, "FALSE" = 16)) +
@@ -488,7 +556,7 @@ ggsave(
 
 ## example ROI
 
-region_noiseproj <- "17Networks_LH_ContA_PFCd_1"
+region_noiseproj <- "17Networks_RH_ContA_PFCl_3"
 noiseprojs_eg <- noiseprojs[region == region_noiseproj]
 
 p_alignment_eg <-
@@ -517,15 +585,15 @@ p_alignment_eg <-
   ) +
   scale_y_continuous(
     name = "SD(trial-level noise)",
-    sec.axis = sec_axis(~ . / weight_vector_coeff, name = "Alignment to component \n(cosine similarity)")
+    sec.axis = sec_axis(~ . / weight_vector_coeff, name = "Noise alignment\n(cosine similarity)")
   ) +
   scale_x_continuous(trans = "log", breaks = c(1, 2, 4, 8, 16, 32, 58)) +
   scale_color_manual(values = color_cosine_sim) +
   annotate(
-    geom = "text", x = 1.3, y = 1.3, label = expression("w"["univar."]), color = color_cosine_sim["proj_uv_scaled"]
+    geom = "text", x = 2.25, y = 3, label = expression("w"["univar."]), color = color_cosine_sim["proj_uv_scaled"]
   ) +
   annotate(
-    geom = "text", x = 1.3, y = 0.3, label = expression('w'['multivar.']), color = color_cosine_sim["proj_rda_scaled"]
+    geom = "text", x = 16, y = 1, label = expression('w'['multivar.']), color = color_cosine_sim["proj_rda_scaled"]
   ) +
   theme(
     axis.line.y.right = element_line(color = color_cosine_sim["axis"]),
@@ -558,20 +626,12 @@ p_totalnoise <-
   geom_vline(xintercept = 0, linetype = "dotted", color = "grey50") +
   labs(
     x = "\U0394Total aligned trial-level variab.:\nunivar. \U2212 multivar. (log)",
-    y = "Number of parcels*subjects",
+    y = "Number of\nparcels*subjects",
     title = "All parcels*subjects"
   ) +
   theme(plot.title = element_text(hjust = 0.5))
 
-p_alignment <- p_alignment_eg + p_totalnoise
-
-ggsave(
-  file.path(path_figs_results, "noise_alignment.pdf"),
-  p_alignment,
-  dev = cairo_pdf, width = two_column_width, height = two_column_width/2.5,
-  units = "mm"
-)
-
+p_alignment <- p_alignment_eg / p_totalnoise
 
 ## association between SD(TRR) and reduction in trial-level noise ----
 
@@ -628,7 +688,8 @@ p_ratio <-
     legend.key.height = unit(1 / 8, "cm"),
     legend.key.width = unit(1 / 4, "cm"),
     legend.text = element_text(size = 6),
-    legend.title = element_text(size = 6)
+    legend.title = element_text(size = 6),
+    plot.margin = unit(c(6, 1, 6, 1), "mm")
   )
 
 ggsave(
@@ -636,23 +697,49 @@ ggsave(
   p_ratio,
   dev = cairo_pdf, width = one_column_width, height = one_column_width*0.95,
   units = "mm"
-)  
+)
+
+## horizontal layout:
+
+ggsave(
+  file.path(path_figs_results, "noise_fig.pdf"),
+  wrap_elements(p_alignment) + wrap_elements(p_ratio) + plot_layout(widths = c(1, 1.2)),
+  dev = cairo_pdf, width = two_column_width, height = one_column_width*1.25,
+  units = "mm"
+)
+
 
 
 ## tables ----
 
-table_trr <-
+## all parcels + stats table
+
+table_all_stats <-
   posterior_summaries$trr[sum_fun %in% c("pointest", "map", "mean", "q05", "sd")] %>%
   bind_rows(summarystats$trr %>% rename(value = r) %>% mutate(sum_fun = "pointest", statistic = "trr")) %>%
-  pivot_wider(id_cols = c("region"), names_from = c(response, sum_fun), values_from = "value", names_prefix = "trr_") %>%
+  pivot_wider(
+    id_cols = "region", names_from = c(response, sum_fun), values_from = "value", names_prefix = "trr_"
+  ) %>%
   full_join(popef %>% select(popef_q05 = q05, popef_tplus = tplus, is_roi, region, network), by = "region") %>%
+  mutate(is_dmcc35 = region %in% rois[dmcc35])
+fwrite(table_all_stats, file.path(path_figs_results, "all_stats.csv"))
+
+table_all_stats %>% filter(trr_rda_q05 > 0) %>% nrow
+table_all_stats %>% filter(trr_uv_q05 > 0) %>% nrow
+table_all_stats %>% filter(trr_rda_q05 > 0 & is_roi) %>% nrow
+
+
+top_trr_rda <- table_all_stats %>% top_n(40, trr_rda_q05) %>% pull(region)
+top_trr_uv <- table_all_stats %>% top_n(40, trr_uv_q05) %>% pull(region)
+
+table_trr <-
+  table_all_stats %>%
   mutate(
     region_lab = label_regions(region),
-    is_core35 = region %in% rois[core32]
+    region_lab = paste0(region_lab, case_when(is_dmcc35 ~ "*", TRUE ~ ""))
   ) %>%
-  filter(is_roi)  %>%
-  arrange(-popef_tplus) %>%
-  mutate(region_lab = paste0(region_lab, case_when(is_core35 ~ "*", TRUE ~ ""))) %>%
+  filter(region %in% top_trr_rda) %>%
+  arrange(-trr_rda_q05) %>%
   select(
     region_lab, popef_tplus,
     trr_uv_map, trr_uv_q05, trr_uv_pointest,
@@ -683,4 +770,3 @@ latex_table <-
   .[-c(1, 2, length(.))] %>%
   paste0(collapse = "\n")
 writeLines(latex_table, file.path(path_figs_results, "table_trr.tex"))
-

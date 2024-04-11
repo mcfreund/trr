@@ -212,7 +212,7 @@ p_trr_dens <-
   geom_vline(data = summarystats$trr, aes(xintercept = r, linetype = response), linewidth = 0.3) +
   facet_wrap(vars(region), labeller = as_labeller(label_regions)) +
   scale_color_manual(values = colors_models[models_hbm], labels = names(models), name = NULL) +
-  scale_linetype_discrete(labels = c("Univariate", "Multivariate"), name = NULL) +
+  scale_linetype_manual(values = linetype_response, labels = response_labels, name = NULL) +
   theme(
     legend.position = c(0.7, 0.05),
     legend.direction = "horizontal", legend.box = "vertical",
@@ -281,7 +281,7 @@ p_ratio_dens <-
   facet_wrap(vars(region), labeller = as_labeller(label_regions)) +
   coord_cartesian(xlim = c(1, 6)) +
   scale_color_manual(values = colors_models[models_hbm], labels = names(models), name = NULL) +
-  scale_linetype_discrete(labels = c("Univariate", "Multivariate"), name = NULL) +
+  scale_linetype_manual(values = linetype_response, labels = response_labels, name = NULL) +
   theme(
     legend.position = c(0.7, 0.05),
     legend.direction = "horizontal", legend.box = "vertical",
