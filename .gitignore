@@ -60,3 +60,4 @@ reports/*html
 
 ## ROI input
 in/*.RDS
+reports/figure/
