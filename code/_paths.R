@@ -5,7 +5,7 @@ if (Sys.info()["nodename"] == "puter2") {
 
   path_out <- "/mnt/d/trr_data/"
 
-} else if (Sys.info()["nodename"] == "CCPLINUX1") {
+} else if (tolower(Sys.info()["nodename"]) == "ccplinux1") {
 
   path_out <- "/data/nil-external/ccp/chenr/trr/out"
 

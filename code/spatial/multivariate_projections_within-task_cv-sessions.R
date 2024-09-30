@@ -436,10 +436,6 @@ out_weights <- rbindlist(allres[names(allres) == "weights"])
 out_noise_projs <- rbindlist(allres[names(allres) == "noise_projs"])
 
 
-#fwrite(out, here("out", "spatial", file_name))
-#fwrite(out_weights, here("out", "spatial", file_name_weights))
-#saveRDS(out_noise_projs, here("out", "spatial", file_name_noise_projs))
-
-out_old <- fread(here("out", "spatial", file_name))
-out_weights_old <- fread(here("out", "spatial", file_name_weights))
-out_noise_projs_old <- saveRDS(here("out", "spatial", file_name_noise_projs))
+fwrite(out, here("out", "spatial", file_name))
+fwrite(out_weights, here("out", "spatial", file_name_weights))
+saveRDS(out_noise_projs, here("out", "spatial", file_name_noise_projs))

@@ -6,8 +6,12 @@ library(doParallel)
 library(foreach)
 library(mfutils)
 library(ggplot2)
+
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
+
 
 sessions <- "baseline"
 variable <- "hilo_all"
@@ -56,7 +60,7 @@ alltrials <- read_results(
   filename_fun = function(...) "errts_trials_target_epoch.RDS",
   read_fun = readRDS,
   n_cores = n_cores,
-  path_base = file.path(path_base, "out", "timeseries")
+  path_base = file.path(path_out, "timeseries")
 )
 
 

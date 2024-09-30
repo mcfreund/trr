@@ -8,8 +8,11 @@ library(mfutils)
 library(ggplot2)
 library(colorspace)
 library(patchwork)
+
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
 
 sessions <- "baseline"
 variable <- "hilo_all"

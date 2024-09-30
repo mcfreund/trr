@@ -17,7 +17,9 @@ library(mfutils)
 library(ggplot2)
 
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
 
 theme_set(theme_minimal(base_size = 14))
 

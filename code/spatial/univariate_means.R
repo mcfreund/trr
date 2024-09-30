@@ -5,7 +5,9 @@ library(foreach)
 library(mfutils)
 
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
 
 
 ## input vars ----
@@ -19,10 +21,12 @@ do_waves <- c(1, 2)
 do_tasks <- c("Stroop")
 n_cores <- 20
 
-# subj_i <- 1
-# wave_i <- 1
-# task_i <- 1
-# session_i <- 1
+if (FALSE) {  ## for dev
+  subj_i <- 1
+  wave_i <- 1
+  task_i <- 1
+  session_i <- 1
+}
 
 ## execute ----
 

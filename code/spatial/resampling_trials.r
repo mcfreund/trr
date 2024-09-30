@@ -17,7 +17,9 @@ library(mfutils)
 library(ggplot2)
 
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
 
 theme_set(theme_minimal(base_size = 14))
 
@@ -55,7 +57,8 @@ alltrials <- read_results(
   glmname = "null_2rpm",
   filename_fun = function(...) "errts_trials_target_epoch.RDS",
   read_fun = readRDS,
-  n_cores = n_cores
+  n_cores = n_cores,
+  path_base = file.path(path_out, "timeseries")
 )
 bads_idx <- lapply(alltrials, function(x) which(is.na(rowSums(x))))  ## get list of bad trials
 bads <- data.table(
@@ -246,7 +249,7 @@ if (draw_plots) {
   }
   allcounts <- rbindlist(counts, idcol = "id")
   allcounts <- separate(allcounts, id, c("subj", "wave", "session"), "__")
-  allcounts <- allcounts[N > 0]
+  allcounts <- as.data.table(allcounts)[N > 0]
 
 
   allcounts %>%
