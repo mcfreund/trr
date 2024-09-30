@@ -145,13 +145,13 @@ extract_ratio <- function(mdl) {
 
 
 pull_criteria <- function(mdl, criteria_nms = c("loo", "waic")) {
-  l <- lapply(criteria_nms, \(x) as.data.table(mdl$criteria[[x]]$estimates, keep.rownames = "Term"))
+  l <- lapply(criteria_nms, function(x) as.data.table(mdl$criteria[[x]]$estimates, keep.rownames = "Term"))
   rbindlist(l)
 }
 
 
 summarize_posterior_ <- function(x, sum_funs) {
-  map_dbl(sum_funs, \(f, samples = x) f(samples))
+  map_dbl(sum_funs, function(f, samples = x) f(samples))
 }
 
 
@@ -184,20 +184,20 @@ summarize_posteriors <- function(
   sum_funs = list(
     mean = mean,
     median = median,
-    map = \(x) as.numeric(bayestestR::map_estimate(x)),
-    hdi95_lower = \(x) as.numeric(bayestestR::hdi(x, 0.95))[2],
-    hdi95_upper = \(x) as.numeric(bayestestR::hdi(x, 0.95))[3],
-    hdi89_lower = \(x) as.numeric(bayestestR::hdi(x, 0.89))[2],
-    hdi89_upper = \(x) as.numeric(bayestestR::hdi(x, 0.89))[3],
+    map = function(x) as.numeric(bayestestR::map_estimate(x)),
+    hdi95_lower = function(x) as.numeric(bayestestR::hdi(x, 0.95))[2],
+    hdi95_upper = function(x) as.numeric(bayestestR::hdi(x, 0.95))[3],
+    hdi89_lower = function(x) as.numeric(bayestestR::hdi(x, 0.89))[2],
+    hdi89_upper = function(x) as.numeric(bayestestR::hdi(x, 0.89))[3],
     sd = sd,
     iqr = IQR,
     mad = mad,
-    q95 = \(x) quantile(x, 0.95),
-    q10 = \(x) quantile(x, 0.10),
-    q05 = \(x) quantile(x, 0.05),
-    rhat = \(x, n_chains_ = n_chains) posterior::rhat(vec2draws(x, n_chains_)[[1]]),
-    ess_bulk = \(x, n_chains_ = n_chains) posterior::ess_bulk(vec2draws(x, n_chains_)[[1]]),
-    ess_tail = \(x, n_chains_ = n_chains) posterior::ess_tail(vec2draws(x, n_chains_)[[1]])
+    q95 = function(x) quantile(x, 0.95),
+    q10 = function(x) quantile(x, 0.10),
+    q05 = function(x) quantile(x, 0.05),
+    rhat = function(x, n_chains_ = n_chains) posterior::rhat(vec2draws(x, n_chains_)[[1]]),
+    ess_bulk = function(x, n_chains_ = n_chains) posterior::ess_bulk(vec2draws(x, n_chains_)[[1]]),
+    ess_tail = function(x, n_chains_ = n_chains) posterior::ess_tail(vec2draws(x, n_chains_)[[1]])
   ),
   by = c("statistic", "model_nm", "response", "region", "session")
 ) {
@@ -242,7 +242,7 @@ load_summaries <- function(
   map(
     setNames(file.path(path, file_names), prefixes),
     ...,
-    \(fn, ...) {
+    function(fn, ...) {
       x <- read_fun(fn)
       sum_fun(x, ...)
     }
