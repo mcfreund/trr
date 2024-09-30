@@ -1,0 +1,187 @@
+---
+title: "Comparing results from different rounds of analyses on Core32: summarystat, baseline"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+        toc: true
+        toc_depth: 3 
+        toc_float: true
+        number_sections: true
+        df_print: paged
+        code_folding: hide
+---
+
+This document compares the results from the initial round of analyses to the results of the second round of 
+analyses of baseline-session Stroop data.
+Several factors differ between these rounds of analyses and the impact of each will be assessed:
+- `subject_sample`: 
+  - set18 (round 1) versus set27 (round 2)
+- `sampler_strat`, the method of random undersampling for balancing classes:
+  - naive: trials were resampled naively, and centered the data using all trials (round 1)
+  - stratified: trials were resampled such that other covariates (color, word) were balanced, and centered the data using only pc50 trials (round 2)
+- `divnorm`:
+  - whether vertices were divisively normalized (scaled) by their residual standard deviation per session\*run, or not (unscaled)
+- `analysis` round: results generated at sequential stages of project/script development:
+  - `round1`: 18 subjects, naive resampling, unscaled
+  - `round2`: 18 subjects, naive resampling, unscaled (should be highly similar to round1)
+  - `round3`: 18 subjects, stratified resampling, scaled and unscaled
+  - `round4`: 27 subjects, stratified resmapling, scaled and unscaled (most recent)
+
+These factors will be assessed separately for univariate and multivarite (ridge) outcomes.
+For simplicity, the `summarystat` model will be used, in contrast to the HBM models.
+
+```{r setup, results = FALSE, message = FALSE, echo = FALSE, warning = FALSE}
+
+library(here)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(colorspace)
+library(knitr)
+library(mfutils)
+library(ggsegSchaefer)
+library(doParallel)
+library(foreach)
+
+source(here("code", "_funs.R"))
+source(here("code", "_constants.R"))
+#source(here("code", "inferential", "_plotting.R"))
+
+## plot settings
+
+opts_chunk$set(out.width = "100%")
+theme_set(theme_minimal(base_size = 7))
+theme_update(
+  strip.background = element_rect(fill = "transparent", color = "transparent")
+  )
+
+## other constants, paths, etc...
+
+subject_sample <- list(
+  subjs18 = subjs_old_complete,
+  subjs27 = subjs_wave12_all
+)
+sampler_strat <- c("naive", "stratified")
+divnorm <- c("scaled", "unscaled")
+analysis <- paste0("round", 1:4)
+
+atlas_nm <- "schaefer2018_17_400_fsaverage5"
+roi_col <- "parcel"  ## "parcel" or "network"
+rois <- mfutils::schaefer2018_17_400_fsaverage5$key[[roi_col]]
+
+## read multivariate projections ----
+
+file_names <- c(
+    round1 = file.path(
+      "/data/nil-external/ccp/freund/trr/out/spatial/old/",
+      "projections__stroop__rda_lambda_100__n_resamples100.csv"),
+    round2 = file.path(
+      "/data/nil-external/ccp/chenr/trr/out/spatial/archive/",
+      "projections__stroop__rda_lambda_100__n_resamples100.csv"),
+    round3 = file.path(
+      "/data/nil-external/ccp/freund/trr/out/",
+      "spatial/projections__stroop__rda_lambda_100__n_resamples100__divnorm_vertex__cv_allsess.csv"),
+    round4_unscaled = file.path(
+      "/data/nil-external/ccp/chenr/trr/out/",
+      "spatial/projections__stroop__rda__n_resamples100__cv_allsess.csv"),
+    round4_scaled = file.path(
+      "/data/nil-external/ccp/chenr/trr/out/",
+      "spatial/projections__stroop__rda__n_resamples100__divnorm_run__divnorm_vertex__cv_allsess.csv")
+)
+d <- lapply(file_names, fread)
+d$round3 <- d$round3[
+  test_session == "baseline",
+  c("task", "roi", "trial", "value", "variable", "auc", "subj", "wave")
+  ]
+d[c("round4_scaled", "round4_unscaled")] <- lapply(
+  d[c("round4_scaled", "round4_unscaled")],
+  function(x) {
+    x <- rename(x, value = value.ridge, auc = auc_ridge)
+    x[test_session == "baseline", c("task", "roi", "trial", "value", "variable", "auc", "subj", "wave", "uv")]
+  }
+)
+
+dat <- rbindlist(d, idcol = "analysis", fill = TRUE)
+
+## read univariate means ----
+
+## round1
+means_round1 <- read_results(
+  waves = c("wave1", "wave2"), tasks = "Stroop", sessions = "baseline", subjs = subject_sample$subjs18,
+  glmname = "null_2rpm",
+  filename_fun = function(...) paste0("trial-means_", atlas_nm, "-", roi_col, "_resid-errts.csv"),
+  read_fun = fread,
+  n_cores = 20
+)
+means_round1 <- lapply(means_round1, function(x) as.data.table(t(x), keep.rownames = "trialnum"))
+means_round1 <- rbindlist(means_round1, idcol = "wave_task_session_subject")
+names(means_round1)[!names(means_round1) %in% c("trialnum", "wave_task_session_subject")] <- rois
+means_round1 <- separate(means_round1, "wave_task_session_subject", into = c("wave", "task", "session", "subj"))
+means_round1$trialnum <- as.numeric(gsub("trial_", "", means_round1$trialnum))
+means_round1 <- means_round1 %>%
+  melt(id.vars = c("wave", "task", "session", "subj", "trialnum"), variable.name = "roi", value.name = "uv")
+means_round1[, analysis := "round1"]
+
+## round 2
+means_round4 <- read_results(
+  waves = c("wave1", "wave2"), tasks = "Stroop", sessions = "baseline", subjs = subject_sample$subjs27,
+  glmname = "null_2rpm",
+  filename_fun = function(...) paste0("trial-means_", atlas_nm, "-", roi_col, "_resid-errts.csv"),
+  read_fun = fread,
+  path_base = "/data/nil-external/ccp/chenr/trr/out/timeseries"
+)
+means_round4 <- lapply(means_round4, function(x) as.data.table(t(x), keep.rownames = "trialnum"))
+means_round4 <- rbindlist(means_round4, idcol = "wave_task_session_subject")
+names(means_round4)[!names(means_round4) %in% c("trialnum", "wave_task_session_subject")] <- rois
+means_round4 <- separate(means_round4, "wave_task_session_subject", into = c("wave", "task", "session", "subj"))
+means_round4$trialnum <- as.numeric(gsub("trial_", "", means_round4$trialnum))
+means_round4 <- means_round4 %>%
+  melt(id.vars = c("wave", "task", "session", "subj", "trialnum"), variable.name = "roi", value.name = "uv")
+means_round4[, analysis := "round4"]
+
+## bind and compare
+means <- rbind(means_round1, means_round4)
+means_w <- means %>% dcast(wave + subj + trialnum + roi ~ analysis, value.var = "uv")
+mean(means_w$round1 == means_w$round4, na.rm = TRUE) ## OK, can disregard different analyis 'rounds' here
+means <- means[analysis == "round4", -"analysis"]
+
+```
+
+
+
+# multivariate response (ridge)
+
+```{r}
+
+dat32 <- dat[roi %in% rois[core32] & subj %in% subject_sample$subjs18]
+dat32_w <- dat32 %>% dcast(roi + variable + subj + wave + trial ~ analysis, value.var = "value")
+hmm <- dat32_w[is.na(round1) & roi == "17Networks_LH_ContA_PFCd_1"]
+
+table(dat32$subj, dat32$analysis)
+range(hmm$trial)
+
+
+lapply(d, function(x) table(x$subj))
+
+
+
+dat_sub <- dat[subj %in% subject_sample$subjs18 & roi == "17Networks_LH_ContA_PFCd_1"]
+table(dat_sub$analysis)
+table(d$round4_scaled[subj %in% subject_sample$subjs18 & roi == "17Networks_LH_ContA_PFCd_1"]$task)
+View(dat_sub[analysis == "round4_scaled" & subj == "130518"])
+
+table(d$round4_unscaled[is.na(value)]$analysis)
+
+
+filepath <- file.path(
+      "/data/nil-external/ccp/chenr/trr/out/",
+      "spatial/projections__stroop__rda__n_resamples100__cv_allsess.csv")
+x <- fread(filepath)
+mean(duplicated(x$value.ridge))
+
+View(x[subj == "130518" & roi == "17Networks_LH_ContA_PFCd_1" & test_session == "baseline"])
+range(x$trial)
+```
+

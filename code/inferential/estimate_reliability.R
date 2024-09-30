@@ -1,8 +1,6 @@
-## TODO
-## add logic for running on both univariate and multivariate
-## - i/o filenames
-
-# Hierarchical modeling for the statistics obtained through multivariate method
+# Hierarchical modeling for test-retest reliability
+#
+# 07/23/2022 update: now using only `brms` and fitting three different models.
 #
 # Author: Ruiqi Chen
 #
@@ -41,69 +39,110 @@
 library(here)
 library(tidyverse)
 library(mfutils)
-library(ggsegSchaefer)
 library(doParallel)
 library(foreach)
-library(lme4)
 library(brms)
 library(parallel)
 
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
-# source(here("code", "inferential", "_plotting.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
+
+
+################### Command line parameters ######################
+
+args <- commandArgs(trailingOnly = TRUE)
+
+# Help
+if (length(args) == 0 || length(args) > 5) {
+  print(paste(
+    "Usage: Rscript estimate_reliability.R",
+    "[response_name (rda/uv)] [n_cores (default = 4)]",
+    "[roi_idx_first (default = 1)] [roi_idx_last (default = 2)]",
+    "[test_session (default = \"baseline\")]"
+  ))
+  q()
+}
+
+# Response name
+response_names <- c(args[[1]])  # "rda" or "uv"
+stopifnot(response_names[[1]] %in% c("rda", "uv"))
+
+# Number of total cores
+if (length(args) >= 2) n_cores <- strtoi(args[[2]]) else n_cores <- 4
+
+# Subset of ROIs to use
+if (length(args) >= 3) roi_idx_first <- strtoi(args[[3]]) else roi_idx_first <- 1
+if (length(args) >= 4) roi_idx_last <- strtoi(args[[4]]) else roi_idx_last <- 2
+stopifnot(roi_idx_first <= roi_idx_last)
+roi_idx <- roi_idx_first:roi_idx_last
+
+# Test on which session
+if (length(args) >= 5) sessions <- c(args[[5]]) else sessions <- c("baseline")
 
 
 ########################## Constants ##############################
 
 n_core_brm <- 4  # Number of cores for parallelization within brm()
-roi_idx <- core32  ## which ROIs to use
-subjs <- subjs_wave12_complete
-do_waves <- c(1, 2)
-n_cores <- 20
-file_refit <- "on_change"  ## "never", "always", see help(brm)
+file_refit <- "on_change"  ## "on_change", "never", "always", see help(brm)
 tasks <- "Stroop"
-sessions <- c("baseline", "proactive", "reactive")
-#response_names <- c("mv", "uv")
-response_names <- c("mv")
-model_names <- c("full", "no_lscov_symm", "no_lscov")
+vterm <- switch(response_names[[1]],
+  rda = "value.rda",
+  ridge = "value.ridge",
+  uv = "uv"
+)
+model_names <- c("no_lscov_symm")
 
 
 ## Input from ./code/spatial/multi...task.R:
 fname <- here("out", "spatial",
-  "projections__stroop__rda_lambda_100__n_resamples100__divnorm_vertex__cv_allsess.csv"
+  "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"
 )
 
-# Atlas
-atlas_nm <- "schaefer2018_17_400_fsaverage5"
-roi_col <- "parcel"  ## "parcel" or "network"
+# Output path
+out_path <- here("out", "inferential", "schaefer2018_17_400_fsaverage5")
+
 
 # ROIs
-if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
-  rois <- get(atlas_nm)$key[[roi_col]]
-  atlas <- schaefer17_400
-  atlas$data$region <- gsub("^lh_|^rh_", "", atlas$data$label)
-} else {
-  stop("not configured for atlas")
-}
+rois <- readRDS(here("in", "rois.RDS"))
 rois <- rois[roi_idx]
-
-out_path <- here("out", "inferential", atlas_nm)
 
 # Make sure we don't use more cores than available
 stopifnot(n_core_brm <= n_cores)
 
-# Select part of the ROIs
 
 ###################### Load and prepare data #########################
 
-d <- read_csv(fname) %>% filter(roi %in% .env$rois)
+# Select part of the ROIs
+# Caution: old version of readr will parse the subject column incorrectly
+#   if you don't supply col_types, resulting in missing subjects!
+d <- read_csv(
+  fname, col_types = list(
+    test_session = "c",
+    roi = "c",
+    value.ridge = "d",
+    value.rda = "d",
+    variable = "c",
+    trial = "i",
+    auc_ridge = "d",
+    auc_rda = "d",
+    uv = "d",
+    subj = "c",
+    task = "c",
+    wave = "c"
+  )
+)
+stop_for_problems(d)
+d <- d %>% filter(roi %in% .env$rois) %>% na.omit()
 
 
 # Convert to wide form and create regressors
 
 d_wide <-
   d %>%
-  pivot_wider(id_cols = c(trial, subj, test_session, task, wave, variable), names_from = roi, values_from = value) %>%
+  pivot_wider(id_cols = c(trial, subj, test_session, task, wave, variable),
+    names_from = roi, values_from = .env$vterm) %>%
   mutate(
     ## coerce to factor:
     variable  = factor(variable, c("lo", "hi"), ordered = TRUE),
@@ -120,7 +159,7 @@ d_wide <-
     hi_wave1 = (variable == "hi") * mean_wave1,
     lo_wave2 = (variable == "lo") * mean_wave2,
     hi_wave2 = (variable == "hi") * mean_wave2
-    )
+  )
 
 # Fix naming problems with brms() formulas
 input_for_bayes <- d_wide %>%
@@ -128,93 +167,95 @@ input_for_bayes <- d_wide %>%
   setNames(gsub("17Networks", "Networks", names(.)))
 rois_bayes <- gsub("17Networks", "Networks", rois)
 
+# Save some memory
+rm(d, d_wide)
 
 
 ################## Fit Bayesian hierarchical models ###############
 
 needs_refit <- enlist(combo_paste(model_names, "__", response_names, "__", sessions))
 
-for (session in sessions) {
-  for (model_name in model_names) {
-    for (response_name in response_names) {
+# CHPC only
+session <- sessions[[1]]
+model_name <- model_names[[1]]
+response_name <- response_names[[1]]
 
-      input_for_bayes_i <- input_for_bayes %>% filter(test_session == session)
+input_for_bayes_i <- input_for_bayes %>% filter(test_session == session)
 
-      ## get formulas and  out file prefix
-      model_info <- get_model_info(model_name = model_name, response_name = response_name, session = session)
-      formulas <-
-        lapply(
-          paste0(rois_bayes, model_info[["formula_string"]]),
-          function(x) bf(as.formula(x), model_info[["formula_sigma"]])
-            )
-      names(formulas) <- rois
+## get formulas and out file prefix
+model_info <- get_model_info(model_name = model_name, response_name = response_name, session = session)
+formulas <-
+  lapply(
+    paste0(rois_bayes, model_info[["formula_string"]]),
+    function(x) bf(as.formula(x), model_info[["formula_sigma"]])
+  )
+names(formulas) <- rois
 
-      ## check:
-      print(get_prior(brmsformula(formulas[[1]]), input_for_bayes, family = student()))
-      if (FALSE) {
-        fit_check <- brm(
-          formulas[[1]],
-          input_for_bayes %>% filter(test_session == "baseline"),
-          cores = n_core_brm,
-          family = student()
-          )
-      }
-
-      print(paste0(" --------------- starting ", model_name, " ", response_name, " ", session, " --------------- "))
-      time_start <- Sys.time()
-      print(time_start)
-
-      fits_bayes <- mclapply(
-        names(formulas),
-
-        function(x) {
-          tryCatch(
-
-            expr = {
-              out_subdir <- file.path(out_path, x)
-              if (!dir.exists(out_subdir)) dir.create(out_subdir)
-              out_file_name <- file.path(out_subdir, model_info$model_prefix)
-              fit <- brm(
-                formula = formulas[[x]],
-                data = input_for_bayes_i,
-                family = student(),
-                cores = n_core_brm,
-                save_model = out_file_name,
-                file = out_file_name,
-                file_refit = file_refit
-              )
-              add_criterion(
-                fit,
-                criterion = c("loo", "waic", "bayes_R2"),
-                file = out_file_name
-                )
-            },
-
-            error = function(e) {
-              print("------------------------")
-              print("ERROR:")
-              print(e)
-              print("------------------------")
-              return(NA)
-            }
-
-          )
-        },
-
-        mc.cores = min(length(formulas), n_cores %/% n_core_brm)
-      )
-
-      print(Sys.time() - time_start)
-      print(paste0(length(rois[is.na(fits_bayes)]), " needs rerun"))
-      needs_refit[[paste0(model_name, "__", response_name, "__", session)]] <- rois[is.na(fits_bayes)]
-
-    }
+## check:
+print(get_prior(brmsformula(formulas[[1]]), input_for_bayes, family = student()))
+if (FALSE) {
+  t0 <- Sys.time()
+  fit_check <- brm(
+    formulas[[1]],
+    input_for_bayes_i,
+    cores = n_core_brm,
+    family = student(),
+    file = here("out", "spatial", "tmp")  # To get a sense of the size
+    )
+  t1 <- Sys.time()
+  add_criterion(
+    fit_check,
+    criterion = c("loo", "waic", "bayes_R2"),
+    file = here("out", "spatial", "tmp")
+  )
+  t2 <- Sys.time()
+  if (TRUE) {
+    cat(paste("Elapsed time to train a", model_name, "model: "))
+    print(t1 - t0)
+    cat("Elapsed time for evaluating: ")
+    print(t2 - t1)
+    cat("Total time: ")
+    print(t2 - t0)
   }
 }
+
+print(paste0(" --------------- starting ", model_name, " ", response_name, " ", session, " --------------- "))
+
+fit_model <- function(x) {
+  out_subdir <- file.path(out_path, x)
+  if (!dir.exists(out_subdir)) dir.create(out_subdir, recursive = TRUE)
+  out_file_name <- file.path(out_subdir, model_info$model_prefix)
+  fit <- brm(
+    formula = formulas[[x]],
+    data = input_for_bayes_i,
+    family = student(),
+    cores = n_core_brm,
+    save_model = out_file_name,
+    file = out_file_name,
+    file_refit = file_refit
+  )
+  add_criterion(
+    fit,
+    criterion = c("loo", "waic", "bayes_R2"),
+    file = out_file_name
+  )
+}
+
+fits_bayes <- mclapply(
+  names(formulas),
+  function(x) {
+    tryCatch(expr = fit_model(x), error = function(e) NA)
+  },
+  mc.cores = min(length(formulas), n_cores %/% n_core_brm)
+)
+
+print(paste0(length(rois[is.na(fits_bayes)]), " needs rerun"))
+needs_refit[[paste0(model_name, "__", response_name, "__", session)]] <- rois[is.na(fits_bayes)]
+
 print(needs_refit)
 
 
-# file_names <- 
+# file_names <-
 #   paste0(
 #     file.path(out_path, rois[10],
 #     c(
@@ -227,4 +268,3 @@ print(needs_refit)
 #     )
 # fits <- lapply(file_names, readRDS)
 # fits
-

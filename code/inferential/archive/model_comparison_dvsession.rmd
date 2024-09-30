@@ -1,0 +1,703 @@
+---
+title: "Model comparison on Core32: `r params$response`, `r params$session`"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+        toc: true
+        toc_depth: 3 
+        toc_float: true
+        number_sections: true
+        df_print: paged
+        code_folding: hide
+params:
+  response: "rda"
+  session: "baseline"
+---
+
+This document summarizes the different summary stats and heirarchical bayesian models fitted to the `r params$response`
+outcome variable within the `r params$session` session.
+
+
+```{r setup, results = FALSE, message = FALSE, echo = FALSE, warning = FALSE}
+
+library(here)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(data.table)
+library(brms)
+library(posterior)
+library(colorspace)
+library(knitr)
+library(mfutils)
+library(ggsegSchaefer)
+library(purrr)
+library(furrr)
+
+source(here("code", "_funs.R"))
+source(here("code", "_constants.R"))
+source(here("code", "inferential", "_plotting.R"))
+
+## plot settings
+
+opts_chunk$set(out.width = "100%")
+theme_set(theme_minimal(base_size = 7))
+theme_update(
+  strip.background = element_rect(fill = "transparent", color = "transparent")
+  )
+axis_text_x_angle <- 30
+
+# ## other constants, paths, etc...
+
+if (exists('params')) {
+  response <- params$response
+  session <- params$session
+} else {
+  response <- "rda"  ## for dev
+  session <- "baseline"
+}
+
+n_cores <- 20
+plan(multicore, workers = n_cores)
+
+models <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma", "summarystat")
+models_hbm <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
+
+atlas_nm <- "schaefer2018_17_400_fsaverage5"
+roi_col <- "parcel"  ## "parcel" or "network"
+rois <- mfutils::schaefer2018_17_400_fsaverage5$key[[roi_col]]
+
+path_out <- file.path("/data/nil-external/ccp/chenr/trr", "out")
+model_info <- expand.grid(model_nm = models_hbm, roi_nm = rois[core32])  ## for reading HBM model results
+colors_model <- setNames(sequential_hcl(5, palette = "Purple-Blue"), models)
+
+## utilities
+
+read_summarize_hbm <- function(
+  model_nm, response, session, base_path, atlas_nm, roi_nm, sum_fun = identity, ...
+  ) {
+  file_name <- file.path(
+      base_path, atlas_nm, roi_nm,
+      paste0(get_model_info(model_nm, response, session)$model_prefix, ".rds")
+      )
+  mod <- readRDS(file_name)
+  sum_fun(mod, ...)
+}
+add_names_and_bind <- function(res, .l) {
+  for (i in seq_along(res)) {
+    res[[i]] <- cbind(res[[i]], .l[i, ])
+  }
+  bind_rows(res)
+}
+future_pmap_bind <- function(.x, .f, ...) add_names_and_bind(future_pmap(.x, .f, ...), .x)
+
+## read data for summarystat model, subset relevant rows/cols, get subject-level stats:
+
+d_summarystat <-
+  fread(file.path(path_out, "spatial", "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"))
+d_summarystat <- d_summarystat %>% rename(ridge = value.ridge, rda = value.rda)
+cols_keep <- c("roi", response, "variable", "trial", "subj", "wave")
+d_summarystat <- d_summarystat[test_session == session & roi %in% rois[core32], ..cols_keep] %>% na.omit()
+#d_summarystat[, roi := gsub("17Networks_", "", roi)]  ## for plotting
+s_summarystat_subj <- d_summarystat[, .(mean(get(response))), by = c("variable", "subj", "wave", "roi")]
+
+## read already-summarized data, inc. model comparison stats and diagnostics
+
+misc <-
+  readRDS(file.path(path_out, "inferential", atlas_nm, "core32_stats.rds")) %>%
+  bind_rows(.id = "model__response__session") %>%
+  separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
+  filter(session %in% .env$session, response %in% .env$response) %>%
+  mutate(model = factor(model, .env$models, ordered = T)) %>%
+  arrange(model, region) %>%
+  rename(roi_nm = region, model_nm = model)
+  #mutate(roi_nm = gsub("17Networks_", "", roi_nm))  ## for plotting
+
+#rois <- gsub("17Networks_", "", rois)  ## for plotting
+
+```
+
+
+# population-level effects (fixed)
+
+## high conflict - low conflict contrast
+
+```{r}
+
+## get summarystat model ests:
+
+s_summarystat_pop <- s_summarystat_subj %>%
+  pivot_wider(names_from = variable, values_from = V1) %>%
+  mutate(hilo = hi - lo) %>%
+  group_by(subj, roi) %>%  ## average over wave
+  summarize(hilo = mean(hilo)) %>%
+  group_by(roi) %>% 
+  summarize(
+    Estimate = mean(hilo),
+    Est.Error = sd(hilo) / sqrt(n()),
+    CI.Lower = Estimate - Est.Error*1.96,
+    CI.Upper = Estimate + Est.Error*1.96
+  ) %>%
+  rename(roi_nm = roi) %>%
+  mutate(model_nm = "summarystat")
+
+## get HBM ests:
+
+model_info_fixef <- model_info
+model_info_fixef$hyp[model_info_fixef$model_nm %in% c("no_lscov_symm", "fixed_sigma")] <-
+  "(hilo_wave1 + hilo_wave1)/2 = 0"
+model_info_fixef$hyp[model_info_fixef$model_nm %in% c("no_lscov", "full")] <-
+  "(hi_wave1 + hi_wave2)/2 - (lo_wave1 + lo_wave2)/2 = 0"
+s_pop_hbm <- future_pmap_bind(
+  model_info_fixef,
+  read_summarize_hbm,
+  response = response,
+  session = session,
+  base_path = file.path(path_out, "inferential"),
+  atlas_nm = atlas_nm,
+  sum_fun = function(x, hyp) {
+    hypothesis(x, hyp)$hypothesis[, c("Estimate", "Est.Error", "CI.Lower", "CI.Upper")]
+  }
+)
+
+## bind:
+
+s_pop <- full_join(s_pop_hbm, s_summarystat_pop)
+s_pop <- s_pop %>% mutate(model_nm = factor(model_nm, levels = models))  ## reorder factor for plotting
+s_pop <- as.data.table(s_pop)
+
+```
+
+### averaged over ROI
+
+
+```{r}
+
+s_pop %>%
+  ggplot(aes(model_nm, Estimate, fill = model_nm)) +
+  stat_summary(fun = mean, geom = "col", width = 0.5, color = "black") +
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.1, color = "black") +
+  scale_fill_manual(values = colors_model) +
+  theme(legend.position = "none") +
+  labs(title = "mean(b-coefficient) over ROIs", caption = "errorbars show across-parcel variability (95CI)")
+
+s_pop %>%
+  ggplot(aes(model_nm, Est.Error, fill = model_nm)) +
+  stat_summary(fun = mean, geom = "col", width = 0.5, color = "black") +
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.1, color = "black") +
+  scale_fill_manual(values = colors_model) +
+  theme(legend.position = "none") +
+  labs(title = "mean(se(b-coefficient)) over ROIs", caption = "errorbars show across-parcel variability (95CI)")
+
+s_pop %>%
+  ggplot(aes(model_nm, Estimate/Est.Error, fill = model_nm)) +
+  stat_summary(fun = mean, geom = "col", width = 0.5, color = "black") +
+  stat_summary(fun.data = mean_cl_boot, geom = "errorbar", width = 0.1, color = "black") +
+  scale_fill_manual(values = colors_model) +
+  theme(legend.position = "none") +
+  labs(title = "mean(t-statistic) over ROIs", caption = "errorbars show across-parcel variability (95CI)")
+
+```
+
+
+### per ROI
+
+
+```{r}
+
+s_pop %>%
+  ggplot(aes(model_nm, Estimate, fill = model_nm)) +
+  geom_hline(yintercept = 0) +
+  geom_col(width = 0.5, color = "black") +
+  geom_errorbar(aes(ymin = CI.Lower, ymax = CI.Upper), width = 0.1, color = "black") +
+  scale_fill_manual(values = colors_model) +
+  theme(legend.position = "none", axis.text.x = element_text(angle = axis_text_x_angle)) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  labs(title = "b-coefficient")
+
+s_pop %>%
+  ggplot(aes(model_nm, Est.Error, fill = model_nm)) +
+  geom_hline(yintercept = 0) +
+  geom_col(width = 0.5, color = "black") +
+  scale_fill_manual(values = colors_model) +
+  theme(legend.position = "none", axis.text.x = element_text(angle = axis_text_x_angle)) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  labs(title = "se(b-coefficient)")
+
+s_pop %>%
+  ggplot(aes(model_nm, Estimate/Est.Error, fill = model_nm)) +
+  geom_hline(yintercept = 0) +
+  geom_col(width = 0.5, color = "black") +
+  scale_fill_manual(values = colors_model) +
+  theme(legend.position = "none", axis.text.x = element_text(angle = axis_text_x_angle)) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  labs(title = "t-statistic")
+
+s_pop %>%
+  ggplot(aes(model_nm, Estimate/Est.Error, color = roi_nm)) +
+  geom_hline(yintercept = 0) +
+  geom_line(aes(group = roi_nm)) +
+  scale_color_viridis_d() +
+  theme(legend.position = "none") +
+  labs(title = "t-statistic (each line an ROI)")
+
+```
+
+
+
+
+
+# subject-level effects (random)
+
+## test-retest reliability in stroop contrast (hi-lo)
+
+
+```{r}
+
+## get summarystat model ests:
+
+s_summarystat_subj_trr <- s_summarystat_subj %>%
+  pivot_wider(names_from = variable, values_from = V1) %>%
+  mutate(hilo = hi - lo) %>%
+  pivot_wider(id_cols = c("subj", "roi"), names_from = wave, values_from = hilo) %>%
+  rename(roi_nm = roi) %>%
+  mutate(model_nm = "summarystat")
+
+## get HBM ests:
+
+s_hbm_subj <- future_pmap_bind(
+  model_info,
+  read_summarize_hbm,
+  response = response,
+  session = session,
+  base_path = file.path(path_out, "inferential"),
+  atlas_nm = atlas_nm,
+  sum_fun = function(x) {
+    mu <- coef(x, summary = FALSE)$subj
+    if ("sd_subj__hilo_wave1" %in% variables(x)) {
+      mu_stroop1 <- mu[, , "hilo_wave1"]
+      mu_stroop2 <- mu[, , "hilo_wave2"]
+    } else {
+      mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"]
+      mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
+    }
+    data.frame(wave1 = colMeans(mu_stroop1), wave2 = colMeans(mu_stroop2), subj = dimnames(mu)[[2]])
+  }
+)
+
+## bind:
+
+s_subj <- full_join(s_hbm_subj, s_summarystat_subj_trr)
+s_subj <- s_subj %>% mutate(model_nm = factor(model_nm, levels = models))  ## reorder factor for plotting
+s_subj <- as.data.table(s_subj)
+
+## get summarystat model ests:
+
+r_summarystat <- s_summarystat_subj_trr %>%
+  group_by(roi_nm, model_nm) %>%
+  summarize(r = cor(wave1, wave2))
+
+## get HBM posteriors:
+
+s_hbm_posterior <- future_pmap_bind(
+  model_info,
+  read_summarize_hbm,
+  response = response,
+  session = session,
+  base_path = file.path(path_out, "inferential"),
+  atlas_nm = atlas_nm,
+  sum_fun = function(mdl) {
+    mu <- ranef(mdl, summary = FALSE)$subj
+    if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
+      mu_stroop1 <- mu[, , "hilo_wave1"]
+      mu_stroop2 <- mu[, , "hilo_wave2"]
+    } else {
+      mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"]
+      mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
+    }
+    trr <- rep(0, dim(mu)[1])
+    for (ii in seq_along(trr)) trr[ii] <- cor(mu_stroop1[ii, ], mu_stroop2[ii, ])
+    data.table(trr = trr, resample = seq_along(trr))
+  }
+)
+
+
+
+```
+
+### subject-level estimates
+
+```{r, fig.width = 12, fig.height = 2.4}
+
+## averaged over ROIs:
+
+s_subj[, .(wave1 = mean(wave1), wave2 = mean(wave2)), by = c("subj", "model_nm")] %>%
+  ggplot(aes(wave1, wave2)) +
+  stat_ellipse(type = "norm", alpha = 0.5) +
+  geom_abline(size = 0.5) +
+  geom_hline(yintercept = 0, size = 0.5) +
+  geom_vline(xintercept = 0, size = 0.5) +
+  geom_point(aes(fill = subj), shape = 21, size = 2, color = "white") +
+  theme(legend.position = "none") +
+  facet_grid(cols = vars(model_nm)) +
+  labs(title = "mean over ROIs") +
+  scale_fill_discrete_qualitative()
+
+
+for (roi in rois[core32]) {
+
+  p <- s_subj[roi_nm == roi] %>%
+    ggplot(aes(wave1, wave2)) +
+    stat_ellipse(type = "norm", alpha = 0.5) +
+    geom_abline(size = 0.5) +
+    geom_hline(yintercept = 0, size = 0.5) +
+    geom_vline(xintercept = 0, size = 0.5) +
+    geom_point(aes(fill = subj), shape = 21, size = 2, color = "white") +
+    theme(legend.position = "none") +
+    facet_grid(cols = vars(model_nm)) +
+    labs(title = roi) +
+    scale_fill_discrete_qualitative()
+
+  print(p)
+
+}
+
+```
+
+### posterior distributions
+
+```{r}
+
+## plot:
+
+s_hbm_posterior %>%
+  ggplot(aes(trr, color = model_nm)) +
+  geom_rect(xmin = 0.7, xmax = 1, ymin = 0, ymax = Inf, fill = "grey50", color = "grey50", alpha = 0.5) +
+  geom_density(size = 1) +
+  geom_vline(data = r_summarystat[, c("roi_nm", "r")], aes(xintercept = r), linetype = "dashed") +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  scale_color_manual(values = colors_model[models_hbm]) +
+  theme(legend.position = c(0.75, 0.05)) +
+  labs(title = "posterior densities for TRR", caption = "dashed line = summary-stat TRR")
+
+```
+
+### statistics on posterior distributions
+
+```{r}
+
+s_hbm_posterior[, .(trr = max_aposteriori(trr)), by = c("model_nm", "roi_nm")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  ggplot(aes(model_nm, trr, color = roi_nm)) +
+  geom_hline(yintercept = 0.7) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "MAP(TRR)", caption = "each line is an ROI")
+
+s_hbm_posterior[, .(trr = mean(trr)), by = c("model_nm", "roi_nm")] %>%
+  full_join(r_summarystat %>% rename(trr = r)) %>%
+  ggplot(aes(model_nm, trr, color = roi_nm)) +
+  geom_hline(yintercept = 0.7) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(-1, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "mean(TRR)", caption = "each line is an ROI")
+
+s_hbm_posterior[, .(trr = sd(trr)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, trr, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme(legend.position = "none") +
+  labs(title = "sd(TRR)", caption = "each line is an ROI")
+
+```
+
+
+## trial/subject level variance ratio (hi-lo contrast)
+
+```{r}
+
+
+## get HBM posteriors:
+
+s_hbm_subj_ratio <- future_pmap_bind(
+  model_info,
+  read_summarize_hbm,
+  response = response,
+  session = session,
+  base_path = file.path(path_out, "inferential"),
+  atlas_nm = atlas_nm,
+  sum_fun = function(x) {
+    ranefs <- ranef(x, summary = FALSE)$subj
+    if ("sd_subj__hilo_wave1" %in% variables(x)) {
+      stroop1 <- ranefs[, , "hilo_wave1"]
+      stroop2 <- ranefs[, , "hilo_wave2"]
+      if ("b_sigma_Intercept" %in% variables(x))  {
+        hyp <- "exp(sigma_Intercept) = 0"
+      } else {
+        hyp <- "(exp(sigma_hilo_wave1) + exp(sigma_hilo_wave2) + exp(sigma_mean_wave1) + exp(sigma_mean_wave2)) / 4 = 0"
+      }
+    } else {
+      stroop1 <- ranefs[, , "hi_wave1"] - ranefs[, , "lo_wave1"]
+      stroop2 <- ranefs[, , "hi_wave2"] - ranefs[, , "lo_wave2"]
+      hyp <- "(exp(sigma_hi_wave1) + exp(sigma_hi_wave2) + exp(sigma_lo_wave1) + exp(sigma_lo_wave2)) / 4 = 0"
+    }
+    sigma_stroop1 <- sqrt(Var(stroop1, 1))
+    sigma_stroop2 <- sqrt(Var(stroop2, 1))
+    sigma_stroop <- (sigma_stroop1 + sigma_stroop2)/2
+    sigma_resid <- hypothesis(x, hyp)$samples$H1
+    ratio <- sigma_resid / sigma_stroop
+
+    data.table(
+      sigma_resid = sigma_resid, 
+      sigma_stroop = sigma_stroop, 
+      ratio = sigma_resid / sigma_stroop,
+      resample = seq_along(ratio)
+      )
+
+  }
+)
+
+
+```
+
+### posterior distributions
+
+
+```{r}
+
+## plot:
+
+s_hbm_subj_ratio %>%
+  ggplot(aes(log(ratio), color = model_nm)) +
+  geom_density(size = 1) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  scale_color_manual(values = colors_model[models_hbm]) +
+  theme(legend.position = c(0.75, 0.05)) +
+  labs(title = "posterior densities for log sd(trial)/sd(subj_stroop)")
+
+```
+
+### statistics on posterior distributions
+
+
+```{r}
+
+s_hbm_subj_ratio[, .(ratio = max_aposteriori(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "MAP(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+s_hbm_subj_ratio[, .(ratio = mean(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "mean(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+s_hbm_subj_ratio[, .(ratio = median(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "median(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+s_hbm_subj_ratio[, .(ratio = sd(ratio)), by = c("model_nm", "roi_nm")] %>%
+  ggplot(aes(model_nm, ratio, color = roi_nm)) +
+  geom_boxplot(fill = "grey50", color = "black", width = 1/3) +
+  geom_line(aes(group = roi_nm), alpha = 0.5) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 100)) +
+  theme(legend.position = "none") +
+  labs(title = "sd(sd(trial)/sd(subj_stroop))", caption = "each line is an ROI")
+
+```
+
+# model comparison
+
+```{r}
+
+misc %>%
+  filter(Term == "Bayes_R2") %>%
+  ggplot(aes(model_nm, Estimate, color = roi_nm)) +
+  geom_line(aes(group = roi_nm)) +
+  scale_color_viridis_d() +
+  scale_y_continuous(limits = c(0, 0.05)) +
+  theme(legend.position = "none") +
+  labs(title = "Bayes R2")
+
+diff_dat <- get_diff_dat(misc %>% filter(Term == "elpd_loo"), name_term = "model_nm", id_term = c("roi_nm"))
+
+diff_dat %>% 
+  ggplot(aes(model_nm, Estimate, color = roi_nm)) +
+  geom_line(aes(group = roi_nm)) +
+  scale_color_viridis_d() +
+  theme(legend.position = "none") +
+  labs(title = "elpd loo")
+
+diff_dat %>% 
+  filter(!model_nm %in% "fixed_sigma - full") %>%
+  ggplot(aes(model_nm, Estimate, color = roi_nm)) +
+  geom_line(aes(group = roi_nm)) +
+  scale_color_viridis_d() +
+  theme(legend.position = "none") +
+  labs(title = "elpd loo (excluding fixed_sigma)")
+
+```
+
+
+# model diagnostics
+
+```{r}
+
+diagnostics <-
+  future_pmap_bind(
+    model_info,
+    read_summarize_hbm,
+    response = response,
+    session = session,
+    base_path = file.path(path_out, "inferential"),
+    atlas_nm = atlas_nm,
+    sum_fun = function(x) {
+      xsum <- summary(x)
+      random <- xsum$random$subj[, c("Rhat", "Bulk_ESS", "Tail_ESS")]
+      fixed <- xsum$fixed[, c("Rhat", "Bulk_ESS", "Tail_ESS")]
+      random <- cbind(term = rownames(random), class = "random", random)
+      fixed <- cbind(term = rownames(fixed), class = "fixed", fixed)
+      rbind(fixed, random)
+    }
+)
+```
+
+## Rhats
+
+```{r}
+diagnostics %>%
+  filter(class == "fixed") %>%
+  ggplot(aes(model_nm, Rhat)) +
+  geom_hline(yintercept = 1.01) +
+  geom_point(
+    aes(color = ifelse(Rhat > 1.01, "firebrick", "black")),
+    position = position_jitter(height = 0, width = 0.1),
+    size = 0.5
+    ) +
+  geom_text(aes(label = ifelse(Rhat > 1.01, as.character(term), "")), size = 1.5, hjust = 0) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  scale_color_identity() +
+  theme(axis.text.x = element_text(angle = axis_text_x_angle)) +
+  labs(title = "fixed effects")
+
+diagnostics %>%
+  filter(class == "random") %>%
+  ggplot(aes(model_nm, Rhat)) +
+  geom_hline(yintercept = 1.01) +
+  geom_point(
+    aes(color = ifelse(Rhat > 1.01, "firebrick", "black")),
+    position = position_jitter(height = 0, width = 0.1),
+    size = 0.5
+    ) +
+  geom_text(aes(label = ifelse(Rhat > 1.01, as.character(term), "")), size = 1.5, hjust = 0) +
+  facet_wrap(vars(roi_nm), labeller = labeller(roi_nm = function(x) gsub("17Networks_", "", x))) +
+  scale_color_identity() +
+  theme(axis.text.x = element_text(angle = axis_text_x_angle)) +
+  labs(title = "random effects")
+
+```
+
+
+
+
+
+```{r scratch, results = FALSE, message = FALSE, echo = FALSE, warning = FALSE}
+
+# s_hbm_subj <- future_pmap_bind(
+#   model_info,
+#   read_summarize_hbm,
+#   response = response,
+#   session = test_session,
+#   base_path = file.path(path_out, "inferential"),
+#   atlas_nm = atlas_nm,
+#   sum_fun = get_trr
+# )
+
+# for (model in models_hbm) {
+
+#   p <- rbind(s_subj[model_nm == model], s_subj[model_nm == "summarystat"]) %>%
+#     ggplot(aes(wave1, wave2)) +
+#     geom_abline(size = 0.5) +
+#     geom_hline(yintercept = 0, size = 0.5) +
+#     geom_vline(xintercept = 0, size = 0.5) +
+#     geom_point(aes(fill = model_nm), shape = 21, color = "white", size = 1.5) +
+#     geom_line(aes(group = subj), size = 1/3, alpha = 0.5) +
+#     facet_wrap(vars(roi_nm), scales = "free") +
+#     labs(title = model) +
+#     scale_fill_manual(values = setNames(c("firebrick", "grey50"), c(model, "summarystat")))
+
+#   print(p)
+
+# }
+
+
+# ## HBM:
+# s_pop <- future_pmap_bind(
+#   model_info,
+#   read_summarize_hbm,
+#   response = response,
+#   session = test_session,
+#   base_path = file.path(path_out, "inferential"),
+#   atlas_nm = atlas_nm,
+#   sum_fun = function(x) {
+#     x_fixef <- fixef(x)
+#     cbind(as.data.frame(x_fixef), term = rownames(x_fixef))
+#   }
+# )
+
+
+# rbind(s_subj[roi_nm == roi & model_nm == model], s_subj[roi_nm == roi & model_nm == "summarystat"]) %>%
+#   ggplot(aes(wave1, wave2)) +
+#   geom_abline(size = 0.5) +
+#   geom_hline(yintercept = 0, size = 0.5) +
+#   geom_vline(xintercept = 0, size = 0.5) +
+#   geom_point(aes(fill = model_nm), shape = 21, color = "white", size = 1.5) +
+#   geom_line(aes(group = subj), size = 1/3, alpha = 0.5) +
+#   labs(title = paste(model, " vs summarystat: ", roi)) +
+#   scale_fill_manual(values = setNames(c("firebrick", "grey50"), c(model, "summarystat")))
+
+# m <- future_pmap(
+#   model_info[1, ],
+#   read_summarize_hbm,
+#   response = response,
+#   session = test_session,
+#   base_path = file.path(path_out, "inferential"),
+#   atlas_nm = atlas_nm
+# )[[1]]
+
+# h <- hypothesis(m, "(hi_wave1 + hi_wave2)/2 - (lo_wave1 + lo_wave2)/2 = 0")
+# #h <- hypothesis(m, "(hilo_wave1 + hilo_wave1)/2 = 0")
+
+# h$hypothesis[, c("Estimate", "Est.Error", "CI.Lower", "CI.Upper")]
+    #x_fixef <- fixef(x)
+    #cbind(as.data.frame(x_fixef), term = rownames(x_fixef))
+  # geom_errorbar(
+  #   data = s_pop[, .(CI.Lower = mean(CI.Lower), CI.Upper = mean(CI.Upper)), by = "model_nm"],
+  #   aes(y = NULL, ymin = CI.Lower, ymax = CI.Upper), width = 0.1, color = "black") +
+
+```
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div>

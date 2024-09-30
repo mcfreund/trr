@@ -1,0 +1,310 @@
+---
+title: "Test-retest reliability model results"
+output: 
+    html_document:
+        toc: false
+        toc_depth: 2
+        toc_float: false
+        number_sections: false
+        df_print: paged
+---
+
+```{r, setup, include = FALSE}
+library(here)
+library(tidyverse)
+library(patchwork)
+
+source(here("code", "_constants.R"))
+source(here("code", "inferential", "_plotting.R"))
+core32_roi <- rois[core32]
+
+debugging <- F
+input_name <- "core32_stats.rds"
+test_session <- "baseline"
+responses <- c("uv", "rda")  # The first one is used as the base level
+models <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
+
+dat <- readRDS(here("out", "inferential", atlas_nm, input_name))
+dat <- bind_rows(dat, .id = "model__response__session") %>%
+  separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
+  filter(session %in% .env$test_session) %>%
+  mutate(model = factor(model, .env$models, ordered = T),
+    response = factor(response, .env$responses, ordered = T)) %>%
+  arrange(model, response, region)
+
+# Note: The TRRs were calculated in `code/spatial/cmp_proj.R` from the spatial models
+cor_res <- read_csv(here("out", "inferential", "pearson_correlations.csv")) %>%
+  filter(subjects == "full", model == "wo_divnorm", response %in% c("rda", "uv")) %>%
+  # mutate(response = if_else(response == "rda", "mv", response)) %>%
+  select(region, response, trr) %>%
+  pivot_wider(names_from = response, values_from = trr) %>%
+  mutate(is_core32 = region %in% .env$core32_roi)
+```
+
+# Relilability Modeling Results
+
+This document outlines the test-retest reliability (TRR) models considered in this project, and relavant results. The TRRs are calculated in "baseline" session only.
+
+## Design and Notation
+
+
+- trial $t \in 1, ..., T$
+- condition $c \in \{\text{incongruent}, \text{congruent}\}$
+- task $k \in \{\text{axcpt}, \text{stroop}\}$
+- session $s \in \{\text{baseline}, \text{proactive}, \text{reactive}\}$
+- repetition $r \in \{\text{test}, \text{retest}\}$
+- participant $p \in 1, ..., P$
+- Response variable: $y$, considered here for a single ROI and for a single type of spatial model (i.e., univariate or multivariate model)
+
+The following indicator variables will be used to denote a $\textbf{dummy or treatment-coding}$ scheme:
+
+$$
+\begin{equation*}
+\begin{split}
+	&\text{incon} = 
+	\begin{cases}
+		1 & \text{if condition = incongruent} \\
+		0 & \text{if condition = congruent}
+	\end{cases},\\
+	&\text{retest} = 
+	\begin{cases}
+		1 & \text{if repetition = retest} \\
+		0 & \text{if repetition = test}
+	\end{cases},\\
+	&\text{test} = 1 - \text{retest}
+\end{split}
+\end{equation*}
+$$
+
+
+The following expression will be used to denote a $\textbf{contrast-coding}$ scheme for the condition factor:
+
+$$
+  \text{stroop} = 
+  \begin{cases}
+    \frac{1}{2} & \text{if condition = incongruent} \\
+    -\frac{1}{2} & \text{if condition = congruent}
+  \end{cases}
+$$
+
+## Model 0: Pearson correlations
+
+$$
+z_{rp} = {\langle y_{tcrp} \rangle}_{t,\ c = \text{Incongruent}} - {\langle y_{tcrp} \rangle}_{t,\ c = \text{Congruent}} \\
+\text{TRR} = \text{Cor}(z_{1p}, z_{2p})
+$$
+
+First we plot the TRR estimated from univariate or multivariate methods for each region:
+
+```{r, Pearson-scatter, echo = FALSE, warning = FALSE, message = FALSE, fig.dim = c(8, 6)}
+
+print("TRRs estimated from Pearson correlation:")
+cor_res
+
+lim <- range(cor_res[, c("rda", "uv")])
+fig <- ggplot(cor_res) +
+  aes(x = uv, y = rda, color = is_core32) +
+  scale_color_manual(values = c("black", "red")) +
+  geom_point(alpha = 0.5) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_rug() +
+  labs(x = "uv", y = "rda",
+    title = "TRR estimated by Pearson correlation over all regions") +
+  xlim(lim[[1]], lim[[2]]) +
+  ylim(lim[[1]], lim[[2]])
+if (debugging) ggsave("tmp.png", plot = fig, width = 8, height = 6) else fig
+```
+
+And the distribution of the difference between the result of "rda" and "uv":
+
+```{r, Pearson-diff, echo = FALSE, fig.dim = c(8, 6)}
+cor_res <- cor_res %>% mutate(`rda - uv` = rda - uv)
+mdiff <- cor_res %>% group_by(is_core32) %>% summarize(diff = mean(`rda - uv`))
+fig <- ggplot(cor_res) +
+  aes(x = `rda - uv`, color = is_core32) +
+  geom_density() +
+  # geom_vline(xintercept = mdiff, linetype = "dashed") +
+  # annotate("text", label = "mean", x = mdiff, y = 1) +
+  labs(x = "rda - uv", y = "density", title = "Distribution of the difference in TRRs")
+if (debugging) ggsave("tmp.png", plot = fig, width = 8, height = 6) else fig
+```
+
+## Model 1: “fixed_sigma"
+
+This model is t-distributed, where the sigma term is independent from the conditions:
+
+```{r, eval = FALSE}
+formula_string <-
+  paste0(
+    " ~ ",
+    "0 + mean_wave1 + mean_wave2 + hilo_wave1 + hilo_wave2 + ",
+    "(0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
+  )
+formula_sigma <- formula(sigma ~ 1)
+```
+
+We made the same plots, but this time we only include core32 regions, and show the mean of the data by a red dot (same below).
+
+```{r, fixed-sigma-scatter, echo = FALSE, fig.dim = c(8, 6)}
+
+# Input data
+fs_res <- dat %>%
+  filter(Term == "TRR", model == "fixed_sigma", response %in% c("rda", "uv")) %>%
+  select(response, Estimate, region) %>%
+  pivot_wider(names_from = response, values_from = Estimate)
+print("TRRs estimated from 'fixed_sigma' model:")
+fs_res
+
+lim <- range(fs_res[, c("rda", "uv")])
+fs_res_mean <- summarise(fs_res, rda = mean(rda), uv = mean(uv))
+fig <- ggplot(fs_res) +
+  aes(x = uv, y = rda) +
+  geom_point(alpha = 0.5) +
+  geom_point(data = fs_res_mean, col = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_rug() +
+  labs(x = "uv", y = "rda",
+    title = "TRR estimated by 'fixed_sigma' model over core32 regions") +
+  xlim(lim[[1]], lim[[2]]) +
+  ylim(lim[[1]], lim[[2]])
+if (debugging) ggsave("tmp.png", plot = fig, width = 8, height = 6) else fig
+```
+
+Here we compare the results if we normalize the data within each vertex before fitting the spatial model.
+
+```{r, w-wo-divnorm-fs, echo = FALSE, fig.dim = c(8, 6)}
+
+fs_w <- readRDS(here("out", "inferential", "w_divnorm", "core32_stats.rds"))
+fs_w <- bind_rows(fs_w, .id = "model__response__session") %>%
+  separate(model__response__session, c("model", "response", "session"), sep = "__") %>%
+  filter(Term == "TRR") %>%
+  select(response, region, Estimate) %>%
+  pivot_wider(names_from = response, values_from = Estimate)
+
+fs_all <- bind_rows(list(wo = fs_res, w = fs_w), .id = "prep") %>%
+  pivot_wider(names_from = prep, values_from = -c(region, prep))
+fs_mean <- summarise(fs_all, across(-region, mean))
+
+fs_diff <- fs_all %>%
+  mutate(rda_diff = rda_w - rda_wo, uv_diff = uv_w - uv_wo, rda_diff = rda_w - rda_wo)
+
+lim <- range(fs_diff[, c("rda_diff", "uv_diff")])
+fs_diff_mean <- summarise(fs_diff, rda_diff = mean(rda_diff), uv_diff = mean(uv_diff))
+fig <- ggplot(fs_diff) +
+  aes(x = uv_diff, y = rda_diff) +
+  geom_point(alpha = 0.5) +
+  geom_point(data = fs_diff_mean, col = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_abline(intercept = 0, slope = -1, linetype = "dotted") +
+  geom_rug() +
+  labs(x = "uv_divnorm - uv_no_divnorm", y = "rda_divnorm - rda_no_divnorm",
+    title = "TRR difference with or without divisive normalization") +
+  xlim(lim[[1]], lim[[2]]) +
+  ylim(lim[[1]], lim[[2]])
+if (debugging) ggsave("tmp.png", plot = fig, width = 8, height = 6) else fig
+```
+
+We can see that divisive normalization seems to reduce TRR for "uv" but did not make big difference for "rda". Therefore, divisive normalization might be biased towards multivariate methods without improving the overall result, and we didn't use it in all other analysis in this report.
+```{r, fs-best, echo = FALSE, eval = FALSE}
+fs_all$best_res <- apply(fs_all, 1, function(r) names(r)[[which.max(r[2:5]) + 1]])
+fig <- ggplot(fs_all) +
+  aes(x = best_res) +
+  geom_bar() +
+  labs(title = "Counts of the best response variable over core32 parcels")
+if (debugging) ggsave("tmp.png", plot = fig, width = 8, height = 6) else fig
+```
+
+## Model 2: "no_lscov_symm"
+
+This model is similar to model 1 but the sigma term is no longer independent from the conditions. Instead, it is also predicted with a same formula as that for the mean:
+
+```{r, eval = FALSE}
+formula_string <-
+  paste0(
+    " ~ ",
+    "0 + mean_wave1 + mean_wave2 + hilo_wave1 + hilo_wave2 + ",
+    "(0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)"
+  )
+formula_sigma <-
+  formula(
+    sigma ~ 0 + mean_wave1 + mean_wave2 + hilo_wave1 + hilo_wave2 +
+    (0 + mean_wave1 + mean_wave2 | subj) + (0 + hilo_wave1 + hilo_wave2 | subj)
+  )
+```
+
+The same scatter plot:
+
+```{r, no-lscov-symm-scatter, echo = FALSE, fig.dim = c(8, 6)}
+
+# Input data
+nls_dat <- dat %>%
+  filter(Term == "TRR", model == "no_lscov_symm", response %in% c("rda", "uv")) %>%
+  select(response, Estimate, region) %>%
+  pivot_wider(names_from = response, values_from = Estimate)
+print("TRRs estimated from 'no_lscov_symm' model:")
+nls_dat
+
+lim <- range(nls_dat[, c("rda", "uv")])
+nls_mean <- nls_dat %>% summarise(across(.env$responses, mean))
+fig <- ggplot(nls_dat) +
+  aes(x = uv, y = rda) +
+  geom_point(alpha = 0.5) +
+  geom_point(data = nls_mean, color = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_rug() +
+  labs(x = "uv", y = "rda",
+    title = "TRR estimated by 'no_lscov_symm' model over core32 regions") +
+  xlim(lim[[1]], lim[[2]]) +
+  ylim(lim[[1]], lim[[2]])
+if (debugging) ggsave("tmp.png", plot = fig, width = 8, height = 6) else fig
+```
+
+Violin plot:
+
+```{r, no-ls-cov-symm-violin, echo = FALSE}
+tmp <- nls_dat %>%
+  pivot_longer(values_to = "TRR", names_to = "response", cols = c(rda, uv))
+fig <- ggplot(tmp) +
+  aes(x = response, y = TRR, color = response) +
+  geom_violin(draw_quantiles = c(0.25, 0.50, 0.75)) +
+  geom_jitter(size = 0.2, height = 0, width = 0.1) +
+  labs(x = "response", y = "TRR", title = "Distribution of TRR")
+if (debugging) ggsave("tmp.png", plot = fig) else fig
+```
+
+## Comparison
+
+```{r, comparison, echo = FALSE, fig.dim = c(24, 8)}
+tmp1 <- cor_res %>%
+  filter(is_core32 == TRUE) %>%
+  select(region, rda, uv) %>%
+  mutate(model = "Pearson")
+tmp2 <- dat %>%
+  filter(Term == "TRR", response %in% c("rda", "uv")) %>%
+  select(model, response, Estimate, region) %>%
+  pivot_wider(values_from = Estimate, names_from = response)
+models <- c("Pearson", "fixed_sigma", "no_lscov_symm", "no_lscov", "full")
+all_trr <- bind_rows(tmp1, tmp2) %>%
+  mutate(model = factor(model, ordered = TRUE, levels = .env$models))
+
+lim <- range(all_trr[, c("rda", "uv")])
+figs <- NULL
+for (mdl in models) {
+  tmp <- all_trr %>% filter(model == .env$mdl)
+  tmp_mean <- tmp %>% summarise(across(.env$responses, mean))
+  fig <- ggplot(tmp) +
+    aes(x = uv, y = rda) +
+    geom_point(alpha = 0.5) +
+    geom_point(data = tmp_mean, color = "red") +
+    geom_abline(intercept = 0, slope = 1) +
+    geom_rug() +
+    labs(x = "uv", y = "rda",
+      title = mdl) +
+    xlim(lim[[1]], lim[[2]]) +
+    ylim(lim[[1]], lim[[2]])
+  if (is.null(figs)) figs <- fig else figs <- figs + fig
+}
+figs <- figs + plot_layout(nrow = 1) +
+  plot_annotation(title = "TRR from different models for different response variables")
+if (debugging) ggsave("tmp.png", plot = figs, width = 24, height = 8) else figs
+```

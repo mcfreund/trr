@@ -1,6 +1,10 @@
 # Resamples trials stratified by confounding factors.
 #
 # Author: Michael Freund
+#
+# 07/21/2022: Fix a bug that fails to exclude trials with NAs
+#
+# Updated by Ruiqi Chen on 07/20/2022 for compatibility with wave13 & wave23
 
 library(here)
 library(tidyr)
@@ -13,7 +17,9 @@ library(mfutils)
 library(ggplot2)
 
 source(here("code", "_constants.R"))
-source(here("code", "_funs.R"))
+source(here("code", "_paths.R"))
+source(here("code", "_subjects.R"))
+source(here("code", "timeseries", "_utils_fmri.R"))
 
 theme_set(theme_minimal(base_size = 14))
 
@@ -22,41 +28,48 @@ theme_set(theme_minimal(base_size = 14))
 variable <- "hilo_all"
 classes <- c("lo", "hi")  ## -, +
 task <- "Stroop"
-train <- c("proactive", "reactive")
-test <- c("baseline")
-subjs <- subjs_wave12_complete
 glm_nm <- "null_2rpm"
 resid_type <- "errts"
-do_waves <- c(1, 2)
+do_waves <- c(2, 3)
+subjs <- switch(toString(do_waves),
+  "1, 2" = subjs_wave12_complete, "1, 3" = subjs_wave13_all, "2, 3" = subjs_wave23_all
+)
+input_fname <- here("in", "behav",
+  paste0("behavior-and-events_wave", do_waves[1], do_waves[2], "_", task, ".csv")
+)
 n_cores <- 12
 n_resamples <- 100
 
-file_name <- here("out", "spatial", "trialidx_stroop_congruency.RDS")
+file_name <- here("out", "spatial",
+  paste0("trialidx_stroop_congruency_wave", do_waves[1], do_waves[2], ".RDS")
+)
 
 ## execute ----
 
 draw_plots <- TRUE
 waves <- waves[do_waves]
+tasks <- task  # In case of error
 n_classes <- length(classes)
 
 ## read trial-wise coefficients:
 alltrials <- read_results(
-  waves = waves, tasks = tasks, sessions = sessions, subjs = subjs,
+  waves = waves, tasks = task, sessions = sessions, subjs = subjs,
   glmname = "null_2rpm",
   filename_fun = function(...) "errts_trials_target_epoch.RDS",
   read_fun = readRDS,
-  n_cores = n_cores
+  n_cores = n_cores,
+  path_base = file.path(path_out, "timeseries")
 )
 bads_idx <- lapply(alltrials, function(x) which(is.na(rowSums(x))))  ## get list of bad trials
 bads <- data.table(
-  trial = unlist(bads_idx),
-  id = names(unlist(bads_idx))
-)
+  trial = stack(bads_idx)$value,
+  id = stack(bads_idx)$ind
+)  # unlist() will rename duplicate ids (when there're multiple bad trials in a session)
 #bads <- bads %>% tidyr::separate(id, c("wave", "task", "session", "subj"), sep = "_")
 
-if (task == "Stroop" & variable == "hilo_all") {
+if (task != "Stroop" | variable != "hilo_all") stop("This script is only for Stroop!")
 
-behav <- fread(here::here("in", "behav", "behavior-and-events_wave12_Stroop.csv"), na.strings = c("", "NA"))
+behav <- fread(input_fname, na.strings = c("", "NA"))
 cols <- c("subj", "wave", "session", "run", "trial.num", "trialtype", "pc", "item", "color", "word")
 behav <- behav[wave %in% do_waves, ..cols]
 behav[, task := "Stroop"]
@@ -92,6 +105,13 @@ resample_stroop <- function(nms, trials, n_resamples, resample_to) {
   trials_idx <- resample_idx(nms, n_resamples = n_resamples, resample_to = resample_to)
   ## convert index for trials into actual trial numbers.
   apply(trials_idx, 2, function(x) trials[x])
+}
+
+# Debugging
+if (FALSE) {
+  subj_nm <- "448347"
+  wave_nm <- "wave2"
+  session_nm <- "baseline"
 }
 
 res <- enlist(combo_paste(subjs, "__", waves, "__", sessions))
@@ -229,7 +249,7 @@ if (draw_plots) {
   }
   allcounts <- rbindlist(counts, idcol = "id")
   allcounts <- separate(allcounts, id, c("subj", "wave", "session"), "__")
-  allcounts <- allcounts[N > 0]
+  allcounts <- as.data.table(allcounts)[N > 0]
 
 
   allcounts %>%
