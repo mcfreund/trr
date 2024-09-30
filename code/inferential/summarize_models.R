@@ -38,7 +38,7 @@ if (atlas_nm == "schaefer2018_17_400_fsaverage5") {
 # - n: number of points for density calculation, by default 100
 #
 # Ouput: a numeric value, the peak position of the density distribution
-rvar_map <- function(x, n = 100) {
+rvar_map <- function(x, n = 512) {
   segs <- seq(min(x), max(x), length.out = n)
   d <- density(x, segs)
   segs[[which.max(d)]]
@@ -94,16 +94,18 @@ get_summary <- function(dat, term_name = NA, group_name = NA, alpha = .05,
 # The reliability is calculated by the correlation of estimated hi-lo contrast
 # for each subject in each posterior sample, then summarized across all samples.
 get_trr <- function(mdl, alpha = .05) {
-  mu <- ranef(mdl, summary = FALSE)$subj
   if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
-    mu_stroop1 <- mu[, , "hilo_wave1"]
-    mu_stroop2 <- mu[, , "hilo_wave2"]
+    trr <- VarCorr(mdl, summary = FALSE)$subj$cor[, "hilo_wave1", "hilo_wave2"]
   } else {
-    mu_stroop1 <- mu[, , "hi_wave1"] - mu[, , "lo_wave1"]
-    mu_stroop2 <- mu[, , "hi_wave2"] - mu[, , "lo_wave2"]
+    vc <- VarCorr(mdl, summary = FALSE)$subj$cov
+    cov_hilo <- (vc[, "hi_wave1", "hi_wave2"] + vc[, "lo_wave1", "lo_wave2"] -
+      vc[, "lo_wave1", "hi_wave2"] - vc[, "lo_wave2", "hi_wave1"])
+    var_hilo12 <- sqrt(
+      (vc[, "hi_wave1", "hi_wave1"] + vc[, "lo_wave1", "lo_wave1"] - 2 * vc[, "hi_wave1", "lo_wave1"]) *
+      (vc[, "hi_wave2", "hi_wave2"] + vc[, "lo_wave2", "lo_wave2"] - 2 * vc[, "hi_wave2", "lo_wave2"])
+    )
+    trr <- cov_hilo / var_hilo12
   }
-  trr <- rep(0, dim(mu)[1])
-  for (ii in seq_along(trr)) trr[ii] <- cor(mu_stroop1[ii, ], mu_stroop2[ii, ])
   get_summary(trr, term_name = "TRR", group_name = "subj",
     alpha = alpha, n_chains = dim(mdl$fit)[2])
 }
@@ -223,6 +225,6 @@ prep_mdl <- function(model_names = c("full"), response_names = c("rda"),
 
 ########################### Main function ##############################
 
-res <- prep_mdl(model_names = c("fixed_sigma", "no_lscov_symm", "no_lscov", "full"),
+res <- prep_mdl(model_names = c("no_lscov_symm"),
   response_names = c("uv", "rda"), in_path = here("out", "inferential", atlas_nm))
-saveRDS(res, file = here("out", "inferential", atlas_nm, "core32_stats.rds"))
+saveRDS(res, file = here("out", "inferential", atlas_nm, "Schaefer400_stats_new.rds"))
