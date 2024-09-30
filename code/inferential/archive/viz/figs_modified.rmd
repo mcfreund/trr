@@ -1,0 +1,575 @@
+---
+title: "Figures for draft of TRR manuscript modified by Ruiqi"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+        toc: true
+        toc_depth: 3 
+        toc_float: true
+        number_sections: true
+        df_print: paged
+        code_folding: hide
+---
+
+# Modifed figures for TRR manuscript
+
+```{r setup, results = FALSE, message = FALSE, echo = FALSE, warning = FALSE}
+
+if (!interactive()) {
+  rmarkdown::render(
+    input = here::here("code", "inferential", "viz", "figs_modified.rmd"),
+    output_file = here::here("reports", "figs_modified.html")
+    )
+}
+
+library(here)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(data.table)
+library(brms)
+library(posterior)
+library(colorspace)
+library(knitr)
+library(mfutils)
+library(ggsegSchaefer)
+library(purrr)
+library(furrr)
+library(patchwork)
+
+source(here("code", "_funs.R"))
+source(here("code", "_constants.R"))
+source(here("code", "inferential", "_plotting.R"))
+
+
+## plot settings
+
+opts_chunk$set(out.width = "100%", dpi = 300, fig.width = 9, fig.height = 6)
+theme_set(theme_minimal(base_size = 12))
+theme_update(
+  strip.background = element_rect(fill = "transparent", color = "transparent"),
+  axis.line.y.left = element_line(),
+  axis.line.x.bottom = element_line(),
+  axis.ticks = element_line(),
+  panel.grid = element_blank()
+  )
+axis_text_x_angle <- 30
+
+legend_network8 <- data.frame(
+  network = c("Cont", "Default", "DorsAttn", "SalVentAttn", "SomMot", "Temp", "Vis", "Limbic"),
+  color = c(qualitative_hcl(7, palette = "Dark 3"), "grey50"),
+  label = c(
+    "Cont", "\nDefault", "\n\nDorsAttn", "\n\n\nSalVentAttn", "\n\n\n\nSomMot", "\n\n\n\n\nTemp", "\n\n\n\n\n\nVis",
+    "\n\n\n\n\n\n\nLimbic"
+    ),
+    stringsAsFactors = FALSE
+)
+colors_network8 <- setNames(legend_network8$color, legend_network8$network)
+colors_response <- setNames(diverging_hcl(10, palette = "Purple-Brown")[c(2, 9)], c("rda", "uv"))
+colors_models <- c(summarystat = "grey40", no_lscov_symm = "firebrick")
+colors_nois <- c(
+  ContA = "firebrick", ContB = "firebrick", DorsAttnA = "firebrick",
+  DorsAttnB = "firebrick", other = "grey60"
+  )
+example_rois <- c(
+    "17Networks_LH_ContA_PFCl_2",
+    "17Networks_LH_ContA_IPS_4"
+  )
+example_roi_names <- c(
+  `17Networks_LH_ContA_PFCl_2` = "left PFCl_2",
+  `17Networks_LH_ContA_IPS_4` = "left IPS_4"
+  )
+
+## other constants, paths, etc...
+
+# n_cores <- 30
+# plan(multicore, workers = n_cores)
+
+responses <- c("rda", "uv")
+models <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma", "summarystat")
+models_hbm <- c("full", "no_lscov", "no_lscov_symm", "fixed_sigma")
+atlas_nm <- "schaefer2018_17_400_fsaverage5"
+roi_col <- "parcel"  ## "parcel" or "network"
+rois <- mfutils::schaefer2018_17_400_fsaverage5$key[[roi_col]]
+
+input_file <- here("out", "inferential", "plt_dat.csv")
+model_info <- expand.grid(model_nm = "no_lscov_symm", response = responses, roi_nm = rois, session = sessions)
+path_figs <- here("figs", "figs_modified")
+```
+
+## Load data
+
+```{r load-data, echo = FALSE, message = FALSE, warning = FALSE}
+plt_dat <- read_csv(input_file)
+plt_dat
+```
+
+## Contingency table
+
+```{r contingency-table, echo = FALSE, message = FALSE, warning = FALSE, results = "asis"}
+
+dat <- plt_dat %>%
+  mutate(mv_vs_uv_MAP = atanh(mv_trr_map) - atanh(uv_trr_map),
+    uv_MAP_vs_ICC = atanh(uv_trr_map) - atanh(uv_ICC),
+    mv_vs_uv_prcs = log(uv_trr_sd / mv_trr_sd)) %>%  # Note: it's precision thus inversed
+  mutate(sgn_mv_vs_uv_MAP = sign(mv_vs_uv_MAP),
+    sgn_uv_MAP_vs_ICC = sign(uv_MAP_vs_ICC),
+    sgn_mv_vs_uv_prcs = sign(mv_vs_uv_prcs)) %>%
+  group_by(sgn_mv_vs_uv_MAP, sgn_uv_MAP_vs_ICC, sgn_mv_vs_uv_prcs)
+
+tmp <- dat %>%
+  select(region, is_roi, contains("_vs_")) %>%
+  summarize(n = n()) %>%
+  mutate(sgn_mv_vs_uv_MAP = recode(sgn_mv_vs_uv_MAP, `-1` = "MV TRR < UV TRR", `1` = "MV TRR > UV TRR"),
+    sgn_uv_MAP_vs_ICC = recode(sgn_uv_MAP_vs_ICC, `-1` = "UV TRR < UV ICC", `1` = "UV TRR > UV ICC"),
+    sgn_mv_vs_uv_prcs = recode(sgn_mv_vs_uv_prcs,
+      `-1` = "MV precision < UV precision", `1` = "MV precision > UV precision")) %>%
+  pivot_wider(names_from = c(sgn_uv_MAP_vs_ICC, sgn_mv_vs_uv_prcs), values_from = n, names_sep = ", ") %>%
+  rename(`MV vs UV TRR` = sgn_mv_vs_uv_MAP) %>%
+  select(`MV vs UV TRR`, `UV TRR < UV ICC, MV precision < UV precision`,
+    `UV TRR < UV ICC, MV precision > UV precision`,
+    `UV TRR > UV ICC, MV precision < UV precision`,
+    `UV TRR > UV ICC, MV precision > UV precision`) %>%
+  kable("pipe", align = "c", caption = "Contingency table for the three comparisons of interest.")
+
+tmp
+```
+
+There are two results related to the comparison of interest (i.e., the comparison between the multivariate and univariate TRR estimates):
+
+1. In any cases, MV precision tends to be better than UC precision. However, in parcels where MV TRR < UV TRR, MV precision is more likely to be lower than UV precision.
+
+2. **In most regions where UV TRR is smaller than UV ICC, MV TRR is greater than UV TRR.** On the contrary, in most regions where UV TRR is greater than UV ICC, MV TRR is smaller than UV TRR.
+
+### "Weird" parcels with TRR < ICC
+
+Raw TRR values from UV and MV were shown below, separated by the sign of uv_TRR - uv_ICC:
+
+```{r mv-vs-uv-TRR-sgn-uv-ICC, echo = FALSE, message = FALSE, warning = FALSE}
+p1 <- dat %>%
+  ungroup() %>%
+  mutate(sgn_uv_MAP_vs_ICC = recode(sgn_uv_MAP_vs_ICC, `-1` = "UV TRR < UV ICC", `1` = "UV TRR > UV ICC")) %>%
+  group_by(sgn_uv_MAP_vs_ICC) %>%
+  ggplot(aes(x = mv_trr_map, y = uv_trr_map, color = uv_ICC)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_y_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "MV TRR (MAP)",
+    y = "UV TRR (MAP)",
+    color = "UV ICC",
+  ) +
+  facet_wrap(~sgn_uv_MAP_vs_ICC, nrow = 1)
+
+p2 <- dat %>%
+  ungroup() %>%
+  mutate(sgn_uv_MAP_vs_ICC = recode(sgn_uv_MAP_vs_ICC, `-1` = "UV TRR < UV ICC", `1` = "UV TRR > UV ICC")) %>%
+  group_by(sgn_uv_MAP_vs_ICC) %>%
+  ggplot(aes(x = mv_trr_mean, y = uv_trr_mean, color = uv_ICC)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_y_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "MV TRR (mean)",
+    y = "UV TRR (mean)",
+    color = "UV ICC",
+  ) +
+  facet_wrap(~sgn_uv_MAP_vs_ICC, nrow = 1)
+
+p1 / p2
+```
+
+Obviously, these "weird" parcels where TRR < ICC usually have very low reliability, sometimes even negative. As we will show below, they also have very high uncertainty:
+
+```{r weird-parcels, echo = FALSE, message = FALSE, warning = FALSE}
+p1 <- dat %>%
+  ungroup() %>%
+  ggplot(aes(x = uv_MAP_vs_ICC, y = uv_trr_sd, color = uv_ICC)) +
+  geom_point(size = 2.5) +
+  # geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  labs(
+    x = "\u0394TRR (UV HBM vs UV ICC) \n(atanh(r))",
+    y = "TRR uncertainty",
+    color = "UV ICC",
+  )
+
+# For MV instead of UV
+p2 <- dat %>%
+  ungroup() %>%
+  mutate(mv_MAP_vs_ICC = atanh(mv_trr_map) - atanh(mv_ICC)) %>%
+  ggplot(aes(x = mv_MAP_vs_ICC, y = mv_trr_sd, color = mv_ICC)) +
+  geom_point(size = 2.5) +
+  # geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  labs(
+    x = "\u0394TRR (MV HBM vs MV ICC) \n(atanh(r))",
+    y = "TRR uncertainty",
+    color = "MV ICC",
+  )
+
+p1 + p2
+```
+
+We can see a negative correlation between TRR-ICC and TRR uncertainty, and a positive correlation between TRR-ICC and ICC itself. In other words, those "weird" parcels with TRR < ICC usually has low reliability with very high uncertainty.
+
+Next, we examine whether MVPA helps reduce uncertainty and improve reliability in these parcels:
+
+```{r weird-parcels-2, echo = FALSE, message = FALSE, warning = FALSE}
+dat %>%
+  ungroup() %>%
+  mutate(sgn_uv_MAP_vs_ICC = recode(sgn_uv_MAP_vs_ICC, `-1` = "UV TRR < UV ICC", `1` = "UV TRR > UV ICC")) %>%
+  group_by(sgn_uv_MAP_vs_ICC) %>%
+  ggplot(aes(x = mv_vs_uv_MAP, y = mv_vs_uv_prcs, color = uv_trr_map)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  labs(
+    x = "\u0394TRR (MV HBM vs UV HBM) \n(atanh(r))",
+    y = "\u0394Precision(TRR)\n (MV vs UV, log ratio)",
+    color = "UV TRR (MAP)",
+  ) +
+  facet_wrap(~sgn_uv_MAP_vs_ICC, nrow = 1)
+```
+
+We can see that, in "weird" parcels, MVPA did help improve both the reliability and the precision of TRR estimates. In normal parcels, MVPA did not improve the reliability (in fact it was lower), but still improved the precision.
+
+This plot also shows the other type of "weird" parcels, i.e., those with higher uncertainty (less precision) using MV. From this plot we can see that these parcels already had a very high and precise TRR estimate using UV (though some of this kind of parcels still get even more precise estimate with MVPA).
+
+## Relationship between uncertainty, noise ratio, and ICC/TRR
+
+```{r scatter4, echo = FALSE, message = FALSE, warning = FALSE}
+
+# Group ratio, trr_sd, ICC by mv or uv
+tmp <- dat %>%
+  ungroup() %>%
+  select(c(mv_ratio, uv_ratio, mv_trr_sd, uv_trr_sd, uv_ICC, mv_ICC, region, is_roi)) %>%
+  pivot_longer(c(mv_ratio, uv_ratio, mv_trr_sd, uv_trr_sd, uv_ICC, mv_ICC), names_to = c("response", "term"),
+    names_pattern = "(mv|uv)_(.*)", values_to = "value") %>%
+  group_by(response) %>%
+  pivot_wider(names_from = term, values_from = value)
+
+f1 <- tmp %>%
+  ggplot() +
+  geom_point(aes(x = ratio, y = trr_sd, color = ICC), size = 2.5) +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  # scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  # scale_y_continuous(limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "trial level noise / subject level noise",
+    y = "TRR uncertainty"
+  ) +
+  facet_wrap(~response, nrow = 1)
+
+f2 <- tmp %>%
+  ggplot() +
+  geom_point(aes(x = ICC, y = trr_sd, color = ratio), size = 2.5) +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  # scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  # scale_y_continuous(limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    y = "TRR uncertainty", color = "noise ratio"
+  ) +
+  facet_wrap(~response, nrow = 1)
+
+print(f1 / f2)
+```
+
+Obviously, the uncertainty of TRR is positively correlated with the noise ratio (with a Spearman correlation above .9), and negatively correlated with ICC (Spearman correlation around -.6).
+
+Therefore, it is interesting to examine the parcels where MVPA can and cannot reduce noise ratio:
+
+```{r uv_vs_mv_ratio_brain, echo = FALSE, message = FALSE, warning = FALSE}
+dat %>%
+  ungroup() %>%
+  mutate(uv_vs_mv_ratio = log(uv_ratio / mv_ratio)) %>%
+  brain_plot(stat_term = "uv_vs_mv_ratio", fig_title = "UV vs MV noise ratio (brighter means MV is better)")
+
+print("Parcels where UV ratio is lowest compare to MV (i.e., weird ones):")
+dat %>%
+  ungroup() %>%
+  mutate(uv_vs_mv_ratio = log(uv_ratio / mv_ratio)) %>%
+  arrange(uv_vs_mv_ratio) %>%
+  select(region, uv_vs_mv_ratio) %>%
+  print(n = 40)
+```
+
+### Correlation between statistics
+
+```{r correlation, echo = FALSE, message = FALSE, warning = FALSE}
+cor_matrix <- dat %>%
+  ungroup() %>%
+  mutate(mv_vs_uv_ratio = log(mv_ratio / uv_ratio)) %>%
+  # mutate(uv_ratio = log(uv_ratio), mv_ratio = log(mv_ratio)) %>%
+  select_if(is.numeric) %>%
+  select(!contains("sgn")) %>%
+  cor(method = "spearman")  # spearman correlation
+
+corrplot::corrplot(cor_matrix, method = "number", tl.col = "black", tl.srt = 30)
+```
+
+### Relationship between mv_TRR_05 and uv_TRR_05
+
+```{r mv-vs-uv-05, echo = FALSE, message = FALSE, warning = FALSE}
+dat %>%
+  ungroup() %>%
+  ggplot(aes(x = mv_trr_05, y = uv_trr_05, color = uv_ICC)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_y_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1))
+```
+
+Obviously, MVPA generates higher lower bound of TRR in most parcels, and more parcels have a lower bound above zero when using MVPA.
+
+## Examine some ROIs
+
+```{r get-trial-data-and-rois, echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+
+fname <- here("out", "spatial",
+  "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"
+)
+
+trial_dat <- read_csv(fname) %>%
+  filter(test_session == "baseline") %>%
+  select(!c(value.ridge, auc_ridge, task, test_session))
+
+eg <- list(
+  tt = c(
+    "17Networks_LH_ContA_PFCd_1",
+    "17Networks_LH_DorsAttnA_SPL_7",
+    "17Networks_LH_DorsAttnB_FEF_2",
+    "17Networks_RH_ContA_IPS_1"
+  ),
+  tf = c(
+    "17Networks_LH_SomMotB_Aud_1",
+    "17Networks_LH_DefaultB_IPL_2",
+    "17Networks_RH_VisCent_ExStr_4",
+    "17Networks_RH_DefaultA_PFCm_3"
+    ),
+  ft = c(
+    "17Networks_LH_ContB_PFCd_1",
+    "17Networks_LH_DorsAttnA_SPL_4",
+    "17Networks_LH_SalVentAttnB_Ins_2",
+    "17Networks_RH_VisCent_ExStr_2"
+  ),
+  ff = c(
+    "17Networks_LH_SomMotA_10",
+    "17Networks_LH_LimbicB_OFC_4",
+    "17Networks_RH_SomMotA_5",
+    "17Networks_RH_LimbicB_OFC_6"
+  )
+)
+```
+
+## More scatter plots
+
+For uv_MAP_vs_ICC over mv_vs_uv_prcs, separated by the sign of mv_vs_uv_MAP, colored by ROI or non ROI:
+
+```{r scatter0, echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+dat %>%
+  ungroup() %>%
+  mutate(sgn_mv_vs_uv_MAP = recode(sgn_mv_vs_uv_MAP, `-1` = "MV TRR < UV TRR", `1` = "MV TRR > UV TRR")) %>%
+  group_by(sgn_mv_vs_uv_MAP) %>%
+  ggplot(aes(x = mv_vs_uv_prcs, y = uv_MAP_vs_ICC, color = is_roi)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = c(`FALSE` = "black", `TRUE` = "firebrick")) +
+  scale_fill_manual(values = c(`FALSE` = "transparent", `TRUE` = "firebrick")) +
+  scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_y_continuous(limits = c(-1.5, 1.5), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "\u0394Precision(TRR)\n (MV vs UV, log ratio)",
+    y = "\u0394TRR (UV HBM vs UV ICC) \n(atanh(r))",
+    color = "ROI or not",
+  ) +
+  facet_wrap(~sgn_mv_vs_uv_MAP, nrow = 1)
+```
+
+For uv_MAP_vs_ICC over mv_vs_uv_prcs, colored by mv_vs_uv_MAP:
+
+```{r scatter1, echo = FALSE, message = FALSE, warning = FALSE, eval = FALSE}
+dat %>%
+  ungroup() %>%
+  mutate(sgn_uv_ICC = recode(sign(uv_ICC), `-1` = "UV ICC < 0", `1` = "UV ICC > 0")) %>%
+  group_by(sgn_uv_ICC) %>%
+  ggplot(aes(x = mv_vs_uv_prcs, y = uv_MAP_vs_ICC, color = mv_vs_uv_MAP)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  scale_y_continuous(limits = c(-1.5, 1.5), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "\u0394Precision(TRR)\n (MV vs UV, log ratio)",
+    y = "\u0394TRR (UV HBM vs UV ICC) \n(atanh(r))",
+    color = "\u0394TRR (MV HBM vs UV HBM) \n(atanh(r))",
+  ) +
+  facet_wrap(~sgn_uv_ICC, nrow = 1)
+```
+
+For uv_MAP_vs_ICC over mv_vs_uv_MAP:
+
+```{r scatter2, echo = FALSE, message = FALSE, warning = FALSE}
+dat %>%
+  ungroup() %>%
+  mutate(sgn_uv_ICC = recode(sign(uv_ICC), `-1` = "UV ICC < 0", `1` = "UV ICC > 0")) %>%
+  group_by(sgn_uv_ICC) %>%
+  ggplot(aes(x = mv_vs_uv_MAP, y = uv_MAP_vs_ICC, color = mv_vs_uv_prcs)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_continuous(limits = c(-3, 3)) +
+  scale_y_continuous(limits = c(-1.5, 1.5), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "\u0394TRR (MV HBM vs UV HBM) \n(atanh(r))",
+    y = "\u0394TRR (UV HBM vs UV ICC) \n(atanh(r))",
+    color = "\u0394Precision(TRR)\n (MV vs UV, log ratio)"
+  ) +
+  facet_wrap(~sgn_uv_ICC, nrow = 1)
+```
+
+We can see a strong negative correlation. In other words, the more gain from replacing ICC with HBM, the less gain from further replacing univariate with multivariate.
+
+For mv_vs_uv_prcs over mv_vs_uv_MAP:
+
+```{r scatter3, echo = FALSE, message = FALSE, warning = FALSE}
+dat %>%
+  ungroup() %>%
+  mutate(sgn_uv_ICC = recode(sign(uv_ICC), `-1` = "UV ICC < 0", `1` = "UV ICC > 0")) %>%
+  group_by(sgn_uv_ICC) %>%
+  ggplot(aes(x = mv_vs_uv_MAP, y = mv_vs_uv_prcs, color = uv_MAP_vs_ICC)) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_viridis_c(option = "magma") +
+  scale_fill_viridis_c(option = "magma") +
+  scale_x_continuous(limits = c(-3, 3)) +
+  scale_y_continuous(limits = c(-1.3, 1.3), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+  labs(
+    x = "\u0394TRR (MV HBM vs UV HBM) \n(atanh(r))",
+    y = "\u0394Precision(TRR)\n (MV vs UV, log ratio)",
+    color = "\u0394TRR (UV HBM vs UV ICC) \n(atanh(r))",
+  ) +
+  facet_wrap(~sgn_uv_ICC, nrow = 1)
+```
+
+We can see a positive correlation between the gain of TRR from MV and the gain of precision from MV, along with the negative correlation mentioned above. It seems like that the parcels where MV precision is much worse than UV all have positive UV ICC with a further boost from UV HBM. In these parcels, MV is worse both in TRR and in precision.
+
+## Calculate some numbers needed in the results section
+
+```{r calculate-numbers, echo = FALSE, message = FALSE, warning = FALSE}
+# Mean mv_ICC and uv_ICC for ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  summarize(
+    mean_mv_ICC = mean(mv_ICC, na.rm = TRUE),
+    mean_uv_ICC = mean(uv_ICC, na.rm = TRUE)
+  )
+
+# Number of parcels with mv_ICC >= 0.7; number of parcels with uv_ICC >= 0.7
+plt_dat %>%
+  ungroup() %>%
+  summarize(
+    n_mv_ICC_gt_07 = sum(mv_ICC >= 0.7, na.rm = TRUE),
+    n_uv_ICC_gt_07 = sum(uv_ICC >= 0.7, na.rm = TRUE),
+    p_mv_ICC_gt_07 = n_mv_ICC_gt_07 / n() * 100,
+    p_uv_ICC_gt_07 = n_uv_ICC_gt_07 / n() * 100,
+  )
+
+# Mean mv_TRR_map and uv_TRR_map for ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  summarize(
+    mean_mv_TRR = mean(mv_trr_map, na.rm = TRUE),
+    mean_uv_TRR = mean(uv_trr_map, na.rm = TRUE)
+  )
+
+# Mean difference between TRR_map and ICC for uv and mv and for ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  summarize(
+    mv_TRR_vs_ICC = mean(mv_trr_map - mv_ICC, na.rm = TRUE),
+    uv_TRR_vs_ICC = mean(uv_trr_map - uv_ICC, na.rm = TRUE)
+  )
+
+# Number of parcels with mv_trr_map >= 0.7; number of parcels with uv_trr_map >= 0.7
+plt_dat %>%
+  ungroup() %>%
+  summarize(
+    n_mv_trr_gt_07 = sum(mv_trr_map >= 0.7, na.rm = TRUE),
+    n_uv_trr_gt_07 = sum(uv_trr_map >= 0.7, na.rm = TRUE),
+    p_mv_trr_gt_07 = n_mv_trr_gt_07 / n() * 100,
+    p_uv_trr_gt_07 = n_uv_trr_gt_07 / n() * 100,
+  )
+
+# Mean of trr_precision for mv and uv in ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  group_by(is_roi) %>%
+  mutate(uv_precision = 1 / uv_trr_sd,
+    mv_precision = 1 / mv_trr_sd) %>%
+  summarize(
+    mean_mv_precision = mean(mv_precision, na.rm = TRUE),
+    mean_uv_precision = mean(uv_precision, na.rm = TRUE)
+  )
+
+# Number and proportion of parcels with mv_precision > uv_precision in ROIs and non-ROIs
+plt_dat %>%
+  ungroup() %>%
+  mutate(is_roi = as.logical(is_roi)) %>%
+  mutate(uv_precision = 1 / uv_trr_sd,
+    mv_precision = 1 / mv_trr_sd) %>%
+  group_by(is_roi) %>%
+  summarize(
+    n_mv_more_precise = sum(mv_precision > uv_precision, na.rm = TRUE),
+    n_uv_more_precise = sum(mv_precision < uv_precision, na.rm = TRUE),
+    p_mv_more_precise = n_mv_more_precise / n() * 100,
+    p_uv_more_precise = n_uv_more_precise / n() * 100,
+  )
+
+# Number and proportion of parcels with mv_precision > uv_precision and mv_ratio < uv_ratio
+plt_dat %>%
+  ungroup() %>%
+  mutate(uv_precision = 1 / uv_trr_sd,
+    mv_precision = 1 / mv_trr_sd) %>%
+  summarize(
+    n_mv_precise_and_less_noise = sum(mv_precision > uv_precision & mv_ratio < uv_ratio, na.rm = TRUE),
+    p_mv_precise_and_less_noise = n_mv_precise_and_less_noise / n() * 100,
+  )
+```
