@@ -53,6 +53,9 @@ scratch/
 ## images
 figs/
 reports/*html
+figure/
+
+trr.code-workspace
 
 ## Slurm files
 *.out
@@ -61,3 +64,4 @@ reports/*html
 ## ROI input
 in/*.RDS
 reports/figure/
+
