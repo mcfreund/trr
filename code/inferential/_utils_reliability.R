@@ -51,7 +51,7 @@ extract_popef <- function(mdl) {
 
 
 extract_trr <- function(mdl) {
-  #mu <- ranef(mdl, summary = FALSE)$subj  ## for conditional TRR
+
   s <- VarCorr(mdl, summary = FALSE)$subj  ## for marginal TRR
 
   if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
@@ -78,36 +78,62 @@ extract_trr <- function(mdl) {
 }
 
 
+get_model_name <- function(mdl) {
+  terms <- posterior::variables(mdl)
+  nm <- dplyr::case_when(
+    "b_sigma_Intercept" %in% terms ~ "fixed_sigma",
+    "sd_subj__hilo_wave1" %in% terms ~ "no_lscov_symm",
+    !"cor_subj__sigma_hi_wave1__hi_wave1" %in% terms ~ "no_lscov",
+    TRUE ~ "full"
+  )
+  nm
+}
+
 extract_ratio <- function(mdl) {
-  ranefs <- ranef(mdl, summary = FALSE)$subj
 
-  if ("sd_subj__hilo_wave1" %in% variables(mdl)) {
-    ## no ls cov symm and fixed sigma
-    stroop1 <- ranefs[, , "hilo_wave1"]
-    stroop2 <- ranefs[, , "hilo_wave2"]
-    if ("b_sigma_Intercept" %in% variables(mdl))  {
-      ## fixed sigma
-      hyp <- "exp(sigma_Intercept) = 0"
-    } else {
-      ## no ls cov
-      hyp <- "(exp(sigma_hilo_wave1) + exp(sigma_hilo_wave2) + exp(sigma_mean_wave1) + exp(sigma_mean_wave2)) / 4 = 0"
+  s <- VarCorr(mdl, summary = FALSE)$subj  ## for marginal TRR
+  model_nm <- get_model_name(mdl)
+
+  ## aggregate individual-level SD in stroop effect (covariance)
+
+  if (model_nm %in% c("fixed_sigma", "no_lscov_symm")) {
+    cov_indiv <- cbind(
+      s$cov[, "hilo_wave1", "hilo_wave1"],
+      s$cov[, "hilo_wave2", "hilo_wave2"]
+    )
+  } else if (model_nm %in% c("no_lscov", "full")) {
+    conditions <- dimnames(s$cov)[[2]]
+    n_resamples <- dim(s$cov)[1]
+    w <- rbind(
+      ("hi_wave1" == conditions) - ("lo_wave1" == conditions),
+      ("hi_wave2" == conditions) - ("lo_wave2" == conditions)
+    )
+    cov_indiv <- matrix(NA_real_, nrow = n_resamples, ncol = nrow(w))
+    for (ii in seq_len(n_resamples)) {
+      cov_indiv[ii, ] <- diag(tcrossprod(tcrossprod(w, s$cov[ii, , ]), w))
     }
-  } else {
-    ## no ls cov and full
-    stroop1 <- ranefs[, , "hi_wave1"] - ranefs[, , "lo_wave1"]
-    stroop2 <- ranefs[, , "hi_wave2"] - ranefs[, , "lo_wave2"]
-    hyp <- "(exp(sigma_hi_wave1) + exp(sigma_hi_wave2) + exp(sigma_lo_wave1) + exp(sigma_lo_wave2)) / 4 = 0"
   }
+  sd_indiv <- exp(rowMeans(log(sqrt(cov_indiv))))
 
-  sigma_stroop1 <- sqrt(mfutils::Var(stroop1, 1))
-  sigma_stroop2 <- sqrt(mfutils::Var(stroop2, 1))
-  sigma_stroop <- (sigma_stroop1 + sigma_stroop2) / 2
-  sigma_resid <- hypothesis(mdl, hyp)$samples$H1
-  ratio <- log(sigma_resid / sigma_stroop)
+  ## aggregate trial-level SD (log SD)
+
+  hyp <- switch(model_nm,
+    fixed_sigma   = "exp(sigma_Intercept) = 0",
+    no_lscov_symm = "exp( (sigma_mean_wave1 + sigma_mean_wave2) / 2 ) = 0",
+    no_lscov      = "exp( (sigma_hi_wave1 + sigma_hi_wave2 + sigma_lo_wave1 + sigma_lo_wave2) / 4 ) = 0",
+    full          = "exp( (sigma_hi_wave1 + sigma_hi_wave2 + sigma_lo_wave1 + sigma_lo_wave2) / 4 ) = 0"
+  )
+  sd_trial <- brms::hypothesis(mdl, hyp)$samples$H1
+
+  ## ratio
+
+  ratio <- log(sd_trial / sd_indiv)
+
+  ## return
 
   d <- data.table(
-    sigma_resid = sigma_resid,
-    sigma_stroop = sigma_stroop,
+    sigma_resid = sd_trial,
+    sigma_stroop = sd_indiv,
     ratio = ratio,
     resample_idx = seq_along(ratio)
   )
@@ -115,6 +141,7 @@ extract_ratio <- function(mdl) {
   melt(d, id.vars = "resample_idx", value.name = "value", variable.name = "statistic")
 
 }
+
 
 
 pull_criteria <- function(mdl, criteria_nms = c("loo", "waic")) {
