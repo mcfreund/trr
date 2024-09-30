@@ -56,3 +56,12 @@ reports/*html
 figure/
 
 trr.code-workspace
+
+## Slurm files
+*.out
+*.err
+
+## ROI input
+in/*.RDS
+reports/figure/
+
