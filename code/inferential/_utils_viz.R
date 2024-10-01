@@ -10,7 +10,7 @@ highlight_overlay <- function(
   lower = min(x),
   upper_alpha = 1,
   lower_alpha = 0.1,
-  scaling_fun = \(x) x^2
+  scaling_fun = function(x) x^2
 ) {
   alphas <- numeric(length(x))
   is_upper <- x > upper
@@ -49,7 +49,7 @@ label_regions <- function(labels, width = 18) {
   labels <- stringr::str_wrap(labels, width = width)
   return(labels)
 }
-label_regions_eg <- \(x) paste0("q", 1:4, "\n", label_regions(eg))
+label_regions_eg <- function(x) paste0("q", 1:4, "\n", label_regions(eg))
 
 
 
@@ -86,7 +86,7 @@ plot_surface <- function(
   position = ggseg::position_brain(. ~ hemi + side),
   underlay = c(color = "grey", fill = "grey"),
   atlas_data = atlas,
-  scale_fill = \(...) scale_fill_viridis_c(option = "magma", na.value = "white", ...),
+  scale_fill = function(...) scale_fill_viridis_c(option = "magma", na.value = "white", ...),
   fill_label = "statistic",
   theme_ = theme_surface(strip.text = element_text(size = rel(1))),
   guides_ = guides(

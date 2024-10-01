@@ -258,7 +258,7 @@ for (i in seq_along(p_trr_stats)) {
 
 pwalk(
   list(p_trr_stats, stat_names),
-  \(l, nm) {
+  function(l, nm) {
     ggsave(
       file.path(path_figs, "model_comparison", "supp", paste0("stroop_trr_", nm, ".pdf")),
       l[[1]] / l[[2]],
@@ -327,7 +327,7 @@ for (i in seq_along(stat_names)) {
 
 pwalk(
   list(p_ratio_stats, stat_names),
-  \(l, nm) {
+  function(l, nm) {
     ggsave(
       file.path(path_figs, "model_comparison", "supp", paste0("stroop_ratio_", nm, ".pdf")),
       l[[1]] / l[[2]],

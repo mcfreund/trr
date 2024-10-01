@@ -9,6 +9,14 @@ if (Sys.info()["nodename"] == "puter2") {
 
   path_out <- "/data/nil-external/ccp/chenr/trr/out"
 
+} else if (Sys.info()["nodename"] == "Brown-1TVGFQCM") {
+
+  path_out <- "~/Documents/proj/trr_data/"
+
+} else {
+
+  path_out <- "/put/your/path/to/the/data/here/"
+
 }
 
 path_reliab <- here::here("out", "inferential", atlas_nm)

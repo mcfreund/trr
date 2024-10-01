@@ -63,3 +63,7 @@ target_trs <- list(
   Stern = 12:14,
   Stroop = 3:5
 )
+
+## response variables
+
+responses <- c("uv", "rda")

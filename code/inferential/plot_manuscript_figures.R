@@ -288,7 +288,7 @@ for (plot_i in seq_along(params_comparison_plots)) {
 ## parcels with trr < lower: 0.1
 highlight_pars <- list(
   upper = 0, lower = -1, lower_alpha = 0.2,
-  scaling_fun = \(x) x^2
+  scaling_fun = function(x) x^2
 )
 color_scale <- scale_fill_viridis_c(
   option = "magma", na.value = "white", oob = scales::squish, limits = c(0, 1), breaks = c(0, 0.5, 1)
@@ -335,7 +335,7 @@ p_trr_thresh_brains <- data %>%
       fill = guide_colorbar(title.position = "top", title.vjust = 0.9),
       color = "none", size = "none"
     ),
-    scale_fill = \(...) color_scale
+    scale_fill = function(...) color_scale
   ) +
   theme(
     legend.position = c(0.25, -0.1),
@@ -745,7 +745,7 @@ table_trr <-
     trr_uv_map, trr_uv_q05, trr_uv_pointest,
     trr_rda_map, trr_rda_q05, trr_rda_pointest
   ) %>%
-  mutate(across(where(is.numeric), \(x) round(x, 2)))
+  mutate(across(where(is.numeric), function(x) round(x, 2)))
 
 names(table_trr) <- c(
   "Parcel (Schaefer 400-17)",
