@@ -104,8 +104,8 @@ n_cores <- 18
 atlas_nm <- "schaefer2018_7_400_fsaverage5"
 do_waves <- c(1, 2)
 waves <- waves[do_waves]
-#glmname <- "lsall_1rpm"
-glmname <- "lssep_1rpm"
+glmname <- "lsall_1rpm"
+#glmname <- "lssep_1rpm"
 
 if (glmname == "lssep_1rpm") {
     suffix <- ".gii"
