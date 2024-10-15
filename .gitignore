@@ -40,7 +40,8 @@ vignettes/*.pdf
 
 
 # large output / data files
-out/timeseries/
+out/timeseries/*
+!out/timeseries/glm_comparison_lssep_1rpm-vs-selav.csv
 out/spatial/
 out/inferential/
 
