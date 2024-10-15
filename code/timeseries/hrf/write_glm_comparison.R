@@ -84,6 +84,19 @@ construct_filenames_gifti <- function(
 }
 
 
+cor_diag <- function(x, y) {
+    
+  x <- scale(x, scale = FALSE)
+  x <- sweep(x, 2, sqrt(colSums(x^2)), "/")
+
+  y <- scale(y, scale = FALSE)
+  y <- sweep(y, 2, sqrt(colSums(y^2)), "/")
+
+  colSums(x * y)
+
+}
+
+
 ## input vars ----
 
 tasks <- "Stroop"
@@ -91,8 +104,8 @@ n_cores <- 18
 atlas_nm <- "schaefer2018_7_400_fsaverage5"
 do_waves <- c(1, 2)
 waves <- waves[do_waves]
-#glmname <- "lsall_1rpm"
-glmname <- "lssep_1rpm"
+glmname <- "lsall_1rpm"
+#glmname <- "lssep_1rpm"
 
 if (glmname == "lssep_1rpm") {
     suffix <- ".gii"
@@ -180,12 +193,14 @@ allres <-
     selav_stroop <- selav_all %*% w
     ## parcellate:
     parcs_stroop_selav <- parcellate(selav_stroop, atlas, col_roi = "parcel")
-
+    
     ## compare and store:
     r_contr <- Map(function(x, y) cor(x, y), parcs_stroop_glmall, parcs_stroop_selav)
     x_mean <- Map(function(x, y) colMeans(cbind(glmall = x, selav = y)), parcs_stroop_glmall, parcs_stroop_selav)
+    r_trial <- sapply(parcellate(as.matrix(cor_diag(t(selav_all), t(giftis))), atlas, col_roi = "parcel"), median, na.rm = TRUE)
     out <- data.table(
-      r = c(do.call(rbind, r_contr)),
+      r_spatial = c(do.call(rbind, r_contr)),
+      r_temporal = r_trial,
       do.call(rbind, x_mean),
       atlas$key,
       subject = subjs[subj_i],
@@ -199,25 +214,3 @@ allres <-
 res <- rbindlist(allres)
 fwrite(res, here("out", "timeseries", paste0("glm_comparison_", glmname, "-vs-selav.csv")))
 
-
-## plot ----
-
-unique(res[is.na(selav), c("subject", "wave", "session")])
-
-#         subject  wave   session
-#  1:      448347 wave2  baseline
-#  2:      448347 wave1  reactive
-#  3:      448347 wave2  reactive
-#  4:      657659 wave1  reactive
-#  5: DMCC1596165 wave2  baseline
-#  6: DMCC6721369 wave1  reactive
-#  7: DMCC9478705 wave2  baseline
-#  8: DMCC9478705 wave2 proactive
-#  9:      132017 wave1  reactive
-# 10: DMCC8260571 wave2  baseline
-# 11: DMCC8260571 wave2 proactive
-# 12:      161832 wave1 proactive
-# 13:      161832 wave2 proactive
-
-res_nona <- complete.cases(res)
-r_univ <- res_nona[, .(r = cor(glmall, selav, use = "complete")), by = .(wave, session, parcel, idx, hemi, network)]
