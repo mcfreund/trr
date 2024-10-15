@@ -42,6 +42,7 @@ vignettes/*.pdf
 # large output / data files
 out/timeseries/*
 !out/timeseries/glm_comparison_lssep_1rpm-vs-selav.csv
+!out/timeseries/deconvolved.h5
 out/spatial/
 out/inferential/
 

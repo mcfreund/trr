@@ -1,9 +1,9 @@
 library(data.table)
 library(dplyr)
 library(ggplot2)
-library(httpgd)
+library(rhdf5)
 theme_set(theme_bw(base_size = 14))
-hgd()
+
 
 combo_paste <- function(a, b, sep = "_", ...) apply(expand.grid(a, b, ...), 1, paste0, collapse = sep)
 
@@ -79,6 +79,11 @@ d$pc <- ifelse(grepl("bias", d$`Sub-brick`), "bias", "unbias")
 d$congruency <- ifelse(grepl("InCon", d$`Sub-brick`), "incon", "congr")
 d$tr <- as.numeric(gsub("([0-9].*)(\\[.*\\])", "\\1", d$`Sub-brick`)) + 1
 core32_names <- as.character(unique(d$roi)[core32])
+
+h5file <- here::here("out", "timeseries", "deconvolved.h5")
+h5createFile(h5file)
+h5write(d, h5file, "data")
+H5close()
 
 
 ## plot ----
