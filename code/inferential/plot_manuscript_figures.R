@@ -264,6 +264,7 @@ p_uv <- arrange_plots(
 
 
 ## comparison plots ----
+
 ## see params_comparison_plots list in _parameters_viz.R
 
 plots_comparison <- enlist(names(params_comparison_plots))
@@ -277,6 +278,29 @@ for (plot_i in seq_along(params_comparison_plots)) {
   arrange_args <- c(list(data = data), pars[!names(pars) %in% c("i_expr", "j_expr")])
   plots_comparison[[plot_i]] <- do.call(arrange_figure_comparison, arrange_args)
 }
+
+p_comparison_mean <-
+  wrap_elements(plots_comparison$icc_hbm_uv_mean$arranged) /
+  wrap_elements(plots_comparison$icc_hbm_mv_mean$arranged)
+ggsave(
+  file.path(arrange_args$path, "comparison_mean.pdf"),
+  p_comparison_mean,
+  width = two_column_width,
+  height = 110*2,
+  units = "mm",
+  dev = cairo_pdf
+)
+p_comparison_median <-
+  wrap_elements(plots_comparison$icc_hbm_uv_median$arranged) /
+  wrap_elements(plots_comparison$icc_hbm_mv_median$arranged)
+ggsave(
+  file.path(arrange_args$path, "comparison_median.pdf"),
+  p_comparison_median,
+  width = two_column_width,
+  height = 110*2,
+  units = "mm",
+  dev = cairo_pdf
+)
 
 
 ## TRR thresholded: univariate versus multivariate ----

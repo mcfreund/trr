@@ -287,3 +287,71 @@ params_comparison_plots <- list(
   )
 
 )
+
+## add supplemental comparison plots with posterior means
+add_supp_comp <- function(params, nm_replace, i_expr, new_label, suffix, text_x_means, text_x_diff) {
+
+  x <- params[[nm_replace]]
+  x$i_expr <- i_expr
+  x$comparison_factor_order <- gsub("MAP estimate", new_label, x$comparison_factor_order)
+  x$params_plot_hist_means$text_x <- text_x_means
+  x$params_plot_hist_diff$text_x <- text_x_diff
+
+  x$filename <- paste0(x$filename, suffix)
+
+  params[[paste0(nm_replace, suffix)]] <- x
+
+  params
+
+}
+
+text_x_means <- c(0.7, 0.7)
+text_x_diff <- c(0.7, 0.7)
+replacements <- list(
+  list(
+    nm_replace = "icc_hbm_uv",
+    response = "uv",
+    sum_fun = c("pointest", "mean"),
+    new_label = "posterior mean",
+    suffix = "_mean",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff - 0.2
+  ),
+  list(
+    nm_replace = "icc_hbm_mv",
+    response = "rda",
+    sum_fun = c("pointest", "mean"),
+    new_label = "posterior mean",
+    suffix = "_mean",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff
+  ),
+  list(
+    nm_replace = "icc_hbm_uv",
+    response = "uv",
+    sum_fun = c("pointest", "median"),
+    new_label = "posterior median",
+    suffix = "_median",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff
+  ),
+  list(
+    nm_replace = "icc_hbm_mv",
+    response = "rda",
+    sum_fun = c("pointest", "median"),
+    new_label = "posterior median",
+    suffix = "_median",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff
+  )
+)
+for (replacement in replacements) {
+  params_comparison_plots <- add_supp_comp(
+      params_comparison_plots,
+      nm_replace = replacement$nm_replace,
+      i_expr = bquote(response == .(replacement$response) & sum_fun %in% .(replacement$sum_fun)),
+      new_label = replacement$new_label,
+      suffix = replacement$suffix,
+      text_x_means = replacement$text_x_means,
+      text_x_diff = replacement$text_x_diff
+)}
