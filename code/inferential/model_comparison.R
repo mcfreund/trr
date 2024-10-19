@@ -342,13 +342,21 @@ lims_trr <- list(
   y = scale_y_continuous(limits = c(-1, 1), breaks = c(-1, 0, 1))
 )
 lims_ratio <- list(
-  x = scale_x_continuous(limits = c(1, 3.5), breaks = c(1, 2, 3, 4)),
-  y = scale_y_continuous(limits = c(1, 3.5), breaks = c(1, 2, 3, 4))
+  x = scale_x_continuous(limits = c(1, 5), breaks = c(1, 2, 3, 4)),
+  y = scale_y_continuous(limits = c(1, 5), breaks = c(1, 2, 3, 4))
 )
 
-p_stats <-
-  (p_trr_stats$map[[1]] + lims_trr$y              + p_trr_stats$map[[2]] + lims_trr) /
-  (p_trr_stats$q05[[1]] + lims_trr$y      + p_trr_stats$q05[[2]] + lims_trr) /
-  (p_ratio_stats$map[[1]] + lims_ratio$y          + p_ratio_stats$map[[2]] + lims_ratio) /
-  (p_ratio_stats$q05[[1]] + lims_ratio$y  + p_ratio_stats$q05[[2]] + lims_ratio)
-ggsave(file.path(path_figs, "model_comparison", paste0("stroop_trratio_stats.pdf")), p_stats, width = 8, height = 7)
+p_stats_trr <-
+  (p_trr_stats$map[[1]] + lims_trr$y      + p_trr_stats$map[[2]]   + lims_trr) /
+  (p_trr_stats$mean[[1]] + lims_trr$y     + p_trr_stats$mean[[2]]  + lims_trr) /
+  (p_trr_stats$q95[[1]] + lims_trr$y      + p_trr_stats$q95[[2]]   + lims_trr) /
+  (p_trr_stats$q05[[1]] + lims_trr$y      + p_trr_stats$q05[[2]]   + lims_trr)
+
+p_stats_ratio <-
+  (p_ratio_stats$map[[1]] + lims_ratio$y  + p_ratio_stats$map[[2]] + lims_ratio) /
+  (p_ratio_stats$mean[[1]] + lims_ratio$y  + p_ratio_stats$mean[[2]] + lims_ratio) /
+  (p_ratio_stats$q05[[1]] + lims_ratio$y  + p_ratio_stats$q05[[2]] + lims_ratio) /
+  (p_ratio_stats$q95[[1]] + lims_ratio$y  + p_ratio_stats$q95[[2]] + lims_ratio)
+
+ggsave(file.path(path_figs, "model_comparison", paste0("stroop_stats_trr.pdf")), p_stats_trr, width = 8, height = 7)
+ggsave(file.path(path_figs, "model_comparison", paste0("stroop_stats_ratio.pdf")), p_stats_ratio, width = 8, height = 7)

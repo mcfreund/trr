@@ -85,6 +85,14 @@ popef <-
     network = get_network(region)
   ) %>%
   rename(m = mean)  ## population-level univariate stroop contrast
+popef_mv <- posterior_summaries$popef[sum_fun %in% c("hdi95_lower", "mean", "sd") & response == "rda"] %>%
+  pivot_wider(names_from = sum_fun, values_from = value) %>%
+  full_join(popef %>% select(region, is_roi), by = "region") %>%
+  mutate(
+    is_pos = hdi95_lower > 0,
+    mean = mean,
+    tplus = mean / sd
+  )
 
 ## examine similarities:
 if (FALSE) {
@@ -130,10 +138,18 @@ uv_mv_icc_hbm <-
   ) %>%
   full_join(popef %>% select(region, tplus, q05, is_roi), by = "region")
 
+uv_mv <-
+  bind_rows(
+    summarystats$trr %>% rename(value = r) %>% mutate(sum_fun = "pointest", statistic = "trr"),
+    rbindlist(posterior_summaries)
+  ) %>%
+  full_join(popef %>% select(region, tplus, q05, is_roi), by = "region")
+
+
 ## change in SD(TRR) in multiv vs univ contrasts
 
 hbm_vs_icc <-
-  uv_mv_icc_hbm[response == "rda" & sum_fun %in% c("map", "pointest")] %>%
+  uv_mv_icc_hbm[response == "rda" & sum_fun %in% c("map", "pointest") & statistic == "trr"] %>%
   pivot_and_contrast(
     contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
     id_cols = c("region", "is_roi", "tplus"),
@@ -263,6 +279,20 @@ p_uv <- arrange_plots(
 )
 
 
+## population-level contrast on multivarate response ----
+
+p_popef_mv <- popef_mv %>%
+  plot_surface(
+    statistic = "tplus",
+    n.breaks = 4,
+    alpha_col = "is_pos"
+  ) +
+  theme(plot.caption.position = "plot", legend.position = c(0.5, 0)) +
+  labs(fill = univ_stat_lab)
+ggsave(file.path(path_figs_results, "pop_tplus_mv.pdf"), p_popef_mv, height = 2, width = 4.5)
+
+
+
 ## comparison plots ----
 
 ## see params_comparison_plots list in _parameters_viz.R
@@ -271,7 +301,7 @@ plots_comparison <- enlist(names(params_comparison_plots))
 for (plot_i in seq_along(params_comparison_plots)) {
   pars <- params_comparison_plots[[plot_i]]
   ## subset
-  data <- uv_mv_icc_hbm[eval(pars$i_expr), ]
+  data <- uv_mv[eval(pars$i_expr), ]
   ## modify
   if (!is.null(pars$j_expr)) data[, eval(pars$j_expr)]
   ## plot
@@ -306,20 +336,15 @@ ggsave(
 ## TRR thresholded: univariate versus multivariate ----
 
 ## set params:
-
-## parcels with trr > upper: full opacity
-## parcels with trr < upper but > lower: linear function btw 0.1 and 1
-## parcels with trr < lower: 0.1
 highlight_pars <- list(
-  upper = 0, lower = -1, lower_alpha = 0.2,
+  upper = 0, lower = -0.5, lower_alpha = 0,
   scaling_fun = function(x) x^2
 )
 color_scale <- scale_fill_viridis_c(
   option = "magma", na.value = "white", oob = scales::squish, limits = c(0, 1), breaks = c(0, 0.5, 1)
 )
-
 data <- full_join(
-  uv_mv_icc_hbm %>% filter(sum_fun == "mean") %>% select(-sum_fun),
+  uv_mv_icc_hbm %>% filter(sum_fun %in% c("mean", "q05", "q95", "map")),
   uv_mv_icc_hbm %>%
     filter(sum_fun == "q05") %>%
     select(-sum_fun) %>%
@@ -327,7 +352,9 @@ data <- full_join(
     mutate(
       trr_q05 = value,
       alpha_trr = highlight_overlay(
-        value, upper = highlight_pars$upper, lower = highlight_pars$lower,
+        value,
+        upper = highlight_pars$upper,
+        lower = highlight_pars$lower,
         lower_alpha = highlight_pars$lower_alpha,
         scaling_fun = highlight_pars$scaling_fun
         ),
@@ -346,28 +373,6 @@ if (FALSE) {
 
 wrapped_labs <- stringr::str_wrap(comparison_factor_labs$uv_mv, width = 7)
 names(wrapped_labs) <- names(comparison_factor_labs$uv_mv)
-p_trr_thresh_brains <- data %>%
-  plot_surface(
-    statistic_col = "value",
-    underlay = c(color = "grey50", fill = "grey50"),
-    #border_size_values = c(`TRUE` = 0.5, `FALSE` = 0.1),
-    alpha_col = "alpha_trr",
-    facet_factor = "response",
-    facet_factor_order = wrapped_labs,
-    fill_label = "Mean(TRR) (r)",
-    guides_ = guides(
-      fill = guide_colorbar(title.position = "top", title.vjust = 0.9),
-      color = "none", size = "none"
-    ),
-    scale_fill = function(...) color_scale
-  ) +
-  theme(
-    legend.position = c(0.25, -0.1),
-    plot.caption.position = "plot"
-  ) +
-  labs(
-    caption = "fully opaque parcels have 5%ile(TRR) > 0   "
-  )
 
 colorgrid <- create_colorgrid(
   colorscale = color_scale,
@@ -380,38 +385,101 @@ colorgrid <- create_colorgrid(
   n = 101
 )
 colorscale <- colorgrid %>%
-  filter(alpha_stat <= 0.5) %>%
   ggplot(aes(as.factor(color_stat), as.factor(alpha_stat))) +
-  geom_raster(fill = "grey50") +
+  geom_raster(fill = "grey25") +
   geom_raster(aes(fill = color, alpha = alpha)) +
   scale_fill_identity() +
   scale_color_identity() +
   scale_alpha_identity() +
-  scale_y_discrete(breaks = c(-1, -0.5, 0, 0.5), labels = c("-1", "-0.5", "0", ">0")) +
-  scale_x_discrete(breaks = c(0, 0.5, 1), labels = c("<=0", "0.5", "1")) +
-  labs(x = "Mean TRR (r)", y = "5%ile TRR (r)") +
+  scale_y_discrete(breaks = c(-1, 0, 1), labels = c("-1", "0", "1")) +
+  scale_x_discrete(breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
   theme(
-    axis.line.x.bottom = element_blank(), axis.line.y.left = element_blank(), axis.title = element_text(size = 4),
-    axis.text = element_text(size = 4),
+    axis.line.x.bottom = element_blank(), axis.line.y.left = element_blank(), axis.title = element_text(size = 6),
+    axis.text = element_text(size = 6),
     axis.ticks = element_line(linewidth = 1/4, color = "grey40"),
     plot.margin = unit(c(1, 1, 1, 1), "mm")
   )
-ggsave(
-  file.path(path_figs_results, "trr_thresh_new_colorscale.pdf"),
-  colorscale,
-  width = 20,
-  height = 15,
-  units = "mm"
-)
 
-ggsave(
-  file.path(path_figs_results, "trr_thresh_new.pdf"),
-  p_trr_thresh_brains,
-  width = oneandhalf_column_width,
-  height = 55,
-  units = "mm"
-)
 
+sum_funs <- c("map", "mean")
+for (sum_fun_i in seq_along(sum_funs)) {
+  sf <- sum_funs[sum_fun_i]
+  stat_name <- names(stat_names)[stat_names == sf]
+  
+  p_trr_thresh_brains <- data %>%
+    filter(sum_fun == sf) %>%
+    plot_surface(
+      statistic_col = "value",
+      underlay = c(color = "black", fill = "grey25"),
+      alpha_col = "alpha_trr",
+      facet_factor = "response",
+      facet_factor_order = wrapped_labs,
+      scale_fill = function(...) color_scale
+    ) +
+    theme(plot.caption.position = "plot", legend.position = "none") +
+    labs(caption = "") +
+    inset_element(
+      colorscale + labs(x = paste0(stat_name, " TRR (r)"), y = "5%-ile\nTRR (r)"),
+      left = 0.4, right = 0.6, bottom = -0.2, top = 0.1
+    )
+  p_stat <- posterior_summaries$trr[popef[, c("is_roi", "region", "tplus")], on = "region"] %>%
+    filter(sum_fun %in% c("q05", sf)) %>%
+    pivot_wider(names_from = sum_fun, values_from = value) %>%
+    rename(model = model_nm, roi = region) %>%
+    arrange(tplus) %>%
+    ggplot(aes(!!sym(sf), q05)) +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0.7, linetype = "dashed") +
+    geom_point(aes(color = tplus), shape = 16, size = 2, stroke = 0, alpha = 0.65) +
+    facet_grid(cols = vars(response), labeller = labeller(response = c(rda = "Multivariate", uv = "Univariate"))) +
+    scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6), limits = c(-6, 6)) +
+    scale_x_continuous(limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    scale_y_continuous(limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    labs(x = paste0(stat_name, " TRR (r)"), y = "5%-ile TRR (r)", color = bquote("t"^"+")) +
+    guides(color = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
+    theme(
+      legend.position = c(0.15, 0.8),
+      legend.direction = "horizontal",
+      legend.key.height = unit(1 / 8, "cm"),
+      legend.key.width = unit(1 / 4, "cm"),
+      legend.text = element_text(size = 6),
+      legend.title = element_text(size = 6)
+    )
+  p_resp <- posterior_summaries$trr[popef[, c("is_roi", "region", "tplus")], on = "region"] %>%
+    pivot_wider(names_from = response, values_from = value) %>%
+    filter(sum_fun %in% c("q05")) %>%
+    rename(model = model_nm, roi = region) %>%
+    arrange(tplus) %>%
+    ggplot(aes(uv, rda)) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_vline(xintercept = 0, linetype = "dashed") +
+    geom_point(aes(color = tplus), shape = 16, size = 2, stroke = 0, alpha = 0.8) +
+    facet_grid(cols = vars(sum_fun), labeller = labeller(sum_fun = c(q05 = "5%-ile"))) +
+    scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6), limits = c(-6, 6)) +
+    scale_x_continuous(limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    scale_y_continuous(limits = c(-1, 1), breaks = c(-1, -0.5, 0, 0.5, 1)) +
+    labs(x = "Univariate TRR (r)", y = "Multivariate TRR (r)", color = bquote("t"^"+")) +
+    #guides(color = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
+    theme(
+      legend.position = "none",
+      legend.direction = "horizontal",
+      legend.key.height = unit(1 / 8, "cm"),
+      legend.key.width = unit(1 / 4, "cm"),
+      legend.text = element_text(size = 6),
+      legend.title = element_text(size = 6)
+    )
+
+  if (sf == "map") {
+    p_q05 <- wrap_elements(p_stat + p_resp + plot_layout(widths = c(1, 0.5833))) / (wrap_elements(p_trr_thresh_brains))
+    #thresh_fig_dims <- c(156, 118)
+  } else if (sf == "mean") {
+    p_q05 <- wrap_elements(p_stat) / wrap_elements(p_trr_thresh_brains)
+  }
+
+  ggsave(file.path(path_figs_results, paste0("trr_thresh_", stat_name, ".pdf")), p_q05, width = 156, height = 118, units = "mm")
+
+}
 
 
 ## complementary benefits and example posteriors ----
@@ -472,7 +540,9 @@ eg <- c(
 
 if (FALSE) {
   ## have a look at anatomical locations:
-  data_eg <- uv_mv_icc_hbm %>% filter(sum_fun == "mean", response == "rda") %>% mutate(value = ifelse(region %in% eg, 1, NA))
+  data_eg <- uv_mv_icc_hbm %>% 
+    filter(sum_fun == "mean", response == "rda") %>% 
+    mutate(value = ifelse(region %in% eg, 1, NA))
   plot_surface(
     data = data_eg,
     statistic = "value",
@@ -738,20 +808,21 @@ ggsave(
 
 ## all parcels + stats table
 
-table_all_stats <-
-  posterior_summaries$trr[sum_fun %in% c("pointest", "map", "mean", "q05", "sd")] %>%
+table_all_stats <-  
+  posterior_summaries$trr[sum_fun %in% c("pointest", "map", "mean", "q05", "q95", "sd")] %>%
+  full_join(posterior_summaries$ratio[statistic == "ratio" & sum_fun == "mean"] %>% mutate(sum_fun = "ratio")) %>%
   bind_rows(summarystats$trr %>% rename(value = r) %>% mutate(sum_fun = "pointest", statistic = "trr")) %>%
   pivot_wider(
     id_cols = "region", names_from = c(response, sum_fun), values_from = "value", names_prefix = "trr_"
   ) %>%
   full_join(popef %>% select(popef_q05 = q05, popef_tplus = tplus, is_roi, region, network), by = "region") %>%
+  full_join(popef_mv %>% select(statistic, model_nm, response, region, session, tplus_mv = tplus), by = "region") %>%
   mutate(is_dmcc35 = region %in% rois[dmcc35])
 fwrite(table_all_stats, file.path(path_figs_results, "all_stats.csv"))
 
 table_all_stats %>% filter(trr_rda_q05 > 0) %>% nrow
 table_all_stats %>% filter(trr_uv_q05 > 0) %>% nrow
 table_all_stats %>% filter(trr_rda_q05 > 0 & is_roi) %>% nrow
-
 
 top_trr_rda <- table_all_stats %>% top_n(40, trr_rda_q05) %>% pull(region)
 top_trr_uv <- table_all_stats %>% top_n(40, trr_uv_q05) %>% pull(region)
@@ -765,23 +836,34 @@ table_trr <-
   filter(region %in% top_trr_rda) %>%
   arrange(-trr_rda_q05) %>%
   select(
-    region_lab, popef_tplus,
-    trr_uv_map, trr_uv_q05, trr_uv_pointest,
-    trr_rda_map, trr_rda_q05, trr_rda_pointest
+    region_lab,
+    popef_tplus, tplus_mv,
+    trr_uv_pointest, trr_uv_map, trr_uv_mean, trr_uv_q05, trr_uv_q95, trr_uv_ratio,
+    trr_rda_pointest, trr_rda_map, trr_rda_mean, trr_rda_q05, trr_rda_q95, trr_rda_ratio
   ) %>%
-  mutate(across(where(is.numeric), function(x) round(x, 2)))
+  mutate(
+    trr_uv_ratio = exp(trr_uv_ratio), trr_rda_ratio = exp(trr_rda_ratio),
+    across(where(is.numeric), function(x) round(x, 2))
+    )
 
 names(table_trr) <- c(
   "Parcel (Schaefer 400-17)",
-  "$t^+$",
-  "MAP",
-  "5\\%ile",
+  "$t^+(\\text{Univ.})$",
+  "$t^+$(\\text{Multiv.})",
   "ICC",
   "MAP",
+  "Mean",
   "5\\%ile",
-  "ICC"
-)
-header <- c(" " = 2, "Univariate TRR" = 3, "Multivariate TRR" = 3)
+  "95\\%ile",
+  "VR",
+  "ICC",
+  "MAP",
+  "Mean",
+  "5\\%ile",
+  "95\\%ile",
+  "VR"
+  )
+header <- c(" " = 3, "Univariate TRR" = 6, "Multivariate TRR" = 6)
 latex_table <-
   table_trr %>%
   kable("latex", booktabs = TRUE, escape = FALSE) %>%
