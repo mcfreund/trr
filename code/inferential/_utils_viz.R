@@ -246,6 +246,7 @@ plot_scatter <- function(
   limits_x = c(-1, 1),
   limits_y = c(-1, 1),
   legend_position = c(0.5, -0.5),
+  legend_direction = "horizontal",
   color_lab = univ_stat_lab,
   scale_color = colorspace::scale_color_continuous_diverging("Blue-Red 3", breaks = c(-6, 0, 6)),
   add_zero_lines = TRUE
@@ -273,7 +274,7 @@ plot_scatter <- function(
     scale_color +
     theme(
       legend.position = legend_position,
-      legend.direction = "horizontal",
+      legend.direction = legend_direction,
       legend.key.height = unit(1 / 8, "cm"),
       legend.key.width = unit(1 / 4, "cm"),
       legend.text = element_text(size = 6),

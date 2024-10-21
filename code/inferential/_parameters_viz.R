@@ -152,6 +152,9 @@ titles <- c(
   ),
   uv_mv_trrprecision = bquote(
     bold("precision of") ~ "test-retest reliability estimates:"~ bold("univariate vs. multivariate")~"Stroop contrasts"
+  ),
+  uv_mv_ratio = bquote(
+    "log ratio of" ~ bold("trial vs. subject variability:") ~ bold("univariate vs. multivariate")~"Stroop contrasts"
   )
 )
 
@@ -176,7 +179,7 @@ comparison_factor_labs <- list(
 params_comparison_plots <- list(
 
   icc_hbm_uv = list(
-    i_expr = quote(response == "uv" & sum_fun %in% c("pointest", "map")),
+    i_expr = quote(response == "uv" & sum_fun %in% c("pointest", "map") & statistic == "trr"),
     contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
     comparison_factor = "model_nm",
     comparison_factor_order = comparison_factor_labs$icc_hbm_trr,
@@ -211,7 +214,7 @@ params_comparison_plots <- list(
   ),
 
   icc_hbm_mv = list(
-    i_expr = quote(response == "rda" & sum_fun %in% c("pointest", "map")),
+    i_expr = quote(response == "rda" & sum_fun %in% c("pointest", "map") & statistic == "trr"),
     contrast_expr = "atanh(no_lscov_symm) - atanh(summarystat)",
     comparison_factor = "model_nm",
     comparison_factor_order = comparison_factor_labs$icc_hbm_trr,
@@ -246,7 +249,7 @@ params_comparison_plots <- list(
   ),
 
   uv_mv_hbm_trrprecision = list(
-    i_expr = quote(sum_fun == "sd"),
+    i_expr = quote(sum_fun == "sd" & statistic == "trr"),
     j_expr = quote(value := 1 / log(value)),
     contrast_expr = "rda - uv",
     comparison_factor = "response",
@@ -284,6 +287,115 @@ params_comparison_plots <- list(
       add_zero_lines = FALSE,
       legend_position = c(0.3, 0.95)
     )
+  ),
+
+  uv_mv_hbm_ratio = list(
+    i_expr = quote(sum_fun == "mean" & statistic == "ratio"),
+    contrast_expr = "rda - uv",
+    comparison_factor = "response",
+    comparison_factor_order = comparison_factor_labs$uv_mv,
+    title = titles$uv_mv_ratio,
+    path = path_figs_results,
+    filename = "uv_mv_hbm_ratio",
+    params_plot_surface = list(
+      alpha_col = NULL,
+      underlay = NULL,
+      #limits = c(-2, 1),
+      #n.breaks = c(-1.6, -1, -0.4),
+      fill_label = "log(Variab. Ratio)"
+    ),
+    params_plot_hist_means = list(
+      text_label = comparison_factor_labs$uv_mv_short,
+      colors = colors_response,
+      text_x = c(1.5, 1.5),
+      text_y = c(150, 120),
+      x_lab = "log(Variab. Ratio)"
+    ),
+    params_plot_hist_diff = list(
+      colors = colors_roi,
+      x_lab = "\U0394(log(Variab. Ratio)):\nmultivar. \U2212 univar.",
+      text_y = c(50, 90),
+      text_x = c(1, 1),
+      text_label = c("'ROIs'" = TRUE, "all\nparcels" = FALSE)
+    ),
+    params_plot_scatter = list(
+      color_col = "tplus", axis_labs = comparison_factor_labs$uv_mv,
+      limits_x = c(1, 4),
+      limits_y = c(1, 4),
+      breaks_x = c(1, 2, 3),
+      breaks_y = c(1, 2, 3),
+      add_zero_lines = FALSE,
+      legend_position = c(0.15, 0.5),
+      legend_direction = "vertical"
+    )
   )
 
 )
+
+## add supplemental comparison plots with posterior means
+add_supp_comp <- function(params, nm_replace, i_expr, new_label, suffix, text_x_means, text_x_diff) {
+
+  x <- params[[nm_replace]]
+  x$i_expr <- i_expr
+  x$comparison_factor_order <- gsub("MAP estimate", new_label, x$comparison_factor_order)
+  x$params_plot_hist_means$text_x <- text_x_means
+  x$params_plot_hist_diff$text_x <- text_x_diff
+
+  x$filename <- paste0(x$filename, suffix)
+
+  params[[paste0(nm_replace, suffix)]] <- x
+
+  params
+
+}
+
+text_x_means <- c(0.7, 0.7)
+text_x_diff <- c(0.7, 0.7)
+replacements <- list(
+  list(
+    nm_replace = "icc_hbm_uv",
+    response = "uv",
+    sum_fun = c("pointest", "mean"),
+    new_label = "posterior mean",
+    suffix = "_mean",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff - 0.2
+  ),
+  list(
+    nm_replace = "icc_hbm_mv",
+    response = "rda",
+    sum_fun = c("pointest", "mean"),
+    new_label = "posterior mean",
+    suffix = "_mean",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff
+  ),
+  list(
+    nm_replace = "icc_hbm_uv",
+    response = "uv",
+    sum_fun = c("pointest", "median"),
+    new_label = "posterior median",
+    suffix = "_median",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff
+  ),
+  list(
+    nm_replace = "icc_hbm_mv",
+    response = "rda",
+    sum_fun = c("pointest", "median"),
+    new_label = "posterior median",
+    suffix = "_median",
+    text_x_means = text_x_means,
+    text_x_diff = text_x_diff
+  )
+)
+for (replacement in replacements) {
+  params_comparison_plots <- add_supp_comp(
+      params_comparison_plots,
+      nm_replace = replacement$nm_replace,
+      i_expr = bquote(response == .(replacement$response) & sum_fun %in% .(replacement$sum_fun) & statistic == "trr"),
+      new_label = replacement$new_label,
+      suffix = replacement$suffix,
+      text_x_means = replacement$text_x_means,
+      text_x_diff = replacement$text_x_diff
+)}

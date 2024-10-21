@@ -202,6 +202,16 @@ summarize_posteriors <- function(
   by = c("statistic", "model_nm", "response", "region", "session")
 ) {
   source(here::here("code", "inferential", "_parameters_reliability.R"))
+  
+  ## if posterior is correlation values, use atanh transform for mean:
+  statistics <- unique(data$statistic)
+  if (length(statistics) == 1) {
+    if (statistics == "trr") {
+      f <- list(mean = function(x) tanh(mean(atanh(x))))
+      sum_funs <- modifyList(sum_funs, f)
+    }
+  }
+  
   data[,
     list(value = summarize_posterior_(value, sum_funs), sum_fun = names(sum_funs)),
     by = c("statistic", "model_nm", "response", "region", "session", "network")]
