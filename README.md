@@ -9,7 +9,7 @@ For questions or concerns please raise an issue on github.
 The **fMRI data derivatives** are hosted at a public zenodo archive (they are not hosted on github due to their large size).
 To run analyses in the paper, you will need to
 1. Clone this repository.
-2. Download the data derivatives, which are hosted on zenodo at []().
+2. Download the data derivatives, which are hosted on zenodo at [https://doi.org/10.5281/zenodo.14043319](https://doi.org/10.5281/zenodo.14043319).
 3. Unpack the zipped file of data derivatives into the `out` directory of this repository.
 4. Skip down to the `Running Analyses` section of this README, in particular, work through the `General Pipeline` subsection.
 
