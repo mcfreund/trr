@@ -1,15 +1,38 @@
 # Test-Retest Reliability
 
-Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control dataset
+Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control dataset.
+This code is capable of reproducing all results and figures within [Freund, Chen, Chen, and Braver (2024; DOI: 10.1101/2024.04.24.591032)](https://doi.org/10.1101/2024.04.24.591032).
+For questions or concerns please raise an issue on github.
 
-## Repo Organization
+## Setup and downloading required dataset
+
+The **fMRI data derivatives** are hosted at a public zenodo archive (they are not hosted on github due to their large size).
+To run analyses in the paper, you will need to
+1. Clone this repository.
+2. Download the data derivatives, which are hosted on zenodo at []().
+3. Unpack the zipped file of data derivatives into the `out` directory of this repository.
+4. Skip down to the `Running Analyses` section of this README, in particular, work through the `General Pipeline` subsection.
+
+NB: **fMRI data derivatives** includes the output of our
+- timeseries models (vertex by trial matrices of activation estimates per subject and session)
+- spatial models (a long-form table of trial-level univariate and multivariate contrasts for each region, session, and subject)
+- reliability models (RDS files containing hierarchical model estimates)
+
+The raw or minimally preprocessed fMRI timeseries data (i.e., inputs to timeseries models) will soon be made available on OpenNeuro, organized as a subcomponent of a larger release of the [Dual Mechanisms of Cognitive Control dataset](https://sites.wustl.edu/dualmechanisms/).
+If you would like these data before the OpenNeuro release, please contact us and we will fulfill your request directly.
+
+---
+
+## Running Analyses
+
+### Repo Organization
 
 - all analysis scripts in `code/`
 - scripts in `code` write to `out/`
 - `in/` contains behavioral data files, subject lists
 - files in `in/` are not modified by any scripts
 
-## Key Factors in DMCC Dataset
+### Key Factors in DMCC Dataset
 
 - trialtype: "high demand" (difficult trials), "low demand" (easy trials)
 - run: run1, run2
@@ -17,7 +40,7 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
 - session: baseline, proactive, reactive
 - wave: wave1, wave2 (wave1 = test, wave2 = retest)
 
-## Relevant Links, Paths
+### Relevant Links, Paths (for internal use)
 
 - [test-retest subject list and QC grades](https://3.basecamp.com/3758557/buckets/3792852/messages/4106700214)
 - [first-pass reliability analyses](https://3.basecamp.com/3758557/buckets/3792852/messages/3983554628)
@@ -27,27 +50,28 @@ Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control
 - trial onset times
   - /data/nil-bluearc/ccp-hcp/DMCC_ALL_BACKUPS/EVTS
 
-## General Pipeline
+### General Pipeline
 
-- Get the trial-level activation of each voxel:
+1. Get the trial-level activation of each voxel:
   - Run `code/timeseries/null_2rpm/run_deconvolve.sh` to detrend the timeseries. The script will read the subject list in `in/` and save the detrended timeseries to `out/timeseries/`.
   - Run `code/timeseries/selav/selav_single_trials.R` to get the trial-level statistics (selective averaging). The script will read the `.gii` files in the GLM output folders in `out/timeseries/`, e.g., `out/timeseries/130518/RESULTS/Stroop/baseline_null_2rpm_wave1/errts_L.gii` (along with `errts_R.gii`), and save the results in `errts_trials_target_epoch.RDS` under the same folder.
-- Calculate the univariate or multivariate trial-level statistics for each parcel:
-  - ~~Run `code/spatial/univariate_means.R` to get the univariate statistics for each parcel (averaging across all voxels). The script will read the `errts_trials_target_epoch.RDS` files generated in the last step and save the results in `trial-means_schaefer2018_17_400_fsaverage5-parcel_resid-errts.csv` in the same folder.~~
+2. Calculate the univariate or multivariate trial-level statistics for each parcel:
   - Run `in/behav/write_behav_subjs.R` to generate trial-level behavioral data from `in/behav/orig/` to CSV files like `behavior-and-events_wave13_Stroop.csv` under `in/behav`.
   - Run `code/spatial/multivariate_projections_within-task_cv-sessions.R` to generate univariate and multivariate statistics for reliability analysis. The script reads the behavior CSVs and outputs to a csv like `out/spatial/projections__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12.csv`
   - Recode "wave2/3" and "wave1/3" to "wave1/2" and gather all three CSVs into `out/spatial/projections__stroop__rda__n_resamples100__divnorm_vertex__cv_allsess.csv` by `code/spatial/gather_csvs.R`
-- Fit hierarchical models for the statistics:
+3. Fit hierarchical models for the statistics:
   - Warning: fitting the bayesian model is VERY SLOW and usually some jobs fail at the first run!
   - Run `code/inferential/estimate_reliability.R` to fit the models. The fitted models will be saved to `out/inferential/schaefer2018_17_400_fsaverage5/NAMES_OF_ROI/`.
     - Each model is about 36M and requires about an hour to train (with 4 chains on 4 cores) without further parallelization.
     - With `mclapply()` over the ROIs we can fit 32 models in about 15 hours. 
     - Currently, we only focus on "baseline" session and the core32 ROIs.
-- Generate summary statistics and plots:
+4. Generate summary statistics and plots:
   - Run `code/inferential/summarize_models.R` to extract the statistics of all models into `out/inferential/schaefer2018_17_400_fsaverage5/core32_stats.rds`, which is a list named by `(model_name, "__", response_name, "__", session)`. Each element in the list is a tibble, containing the statistics.
   - `knitr::knit()` this file `reports/model_comparison.rmd` to generate the report `reports/model_comparison.md` and relevant figures under `reports/figure`
 
-## Method
+---
+
+## Method Outline
 
 ### Subjects, tasks, data collection, parcellation and definition of ROIs, etc.
 
