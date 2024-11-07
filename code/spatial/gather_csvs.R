@@ -7,21 +7,47 @@
 
 library(here)
 library(data.table)
+library(purrr)
 
-in_path <- here("out", "spatial")
-f_prefix <- "projections__stroop__rda__n_resamples100__demean_run__cv_allsess"
-wave12_file <- paste0(f_prefix, "_wave12.csv")
-wave13_file <- paste0(f_prefix, "_wave13.csv")
-wave23_file <- paste0(f_prefix, "_wave23.csv")
-output_file <- paste0(f_prefix, ".csv")
+gather_csvs <- function(
+  output_type,
+  filename_components = c("stroop__rda__n_resamples100__demean_run", "__cv_allsess"),
+  in_path = here("out", "spatial"),
+  do_network = FALSE,
+  do_write = FALSE
+  ) {
+  
+  stopifnot(output_type %in% c("projections", "noise_projs", "weights") && length(output_type) == 1)
+  stopifnot(length(filename_components) == 2)
+  network_str <- switch(do_network + 1, "", "__network")
+  is_noiseprojs <- output_type == "noise_projs"
+  file_type <- switch(is_noiseprojs + 1, "csv", "RDS")
+  
+  f_prefix <- paste0(output_type, "__", filename_components[1], network_str, filename_components[2])
+  wave12_file <- paste0(f_prefix, "_wave12.", file_type)
+  wave13_file <- paste0(f_prefix, "_wave13.", file_type)
+  wave23_file <- paste0(f_prefix, "_wave23.", file_type)
+  output_file <- paste0(f_prefix, ".", file_type)
+  funcs <- switch(
+    is_noiseprojs + 1,
+    list(read_fun = fread, write_fun = fwrite),
+    list(read_fun = readRDS, write_fun = saveRDS)
+  )
+  wave12 <- funcs$read_fun(here(in_path, wave12_file))
+  wave13 <- funcs$read_fun(here(in_path, wave13_file))[wave == "wave3", wave := "wave2"]
+  ## Order matters:
+  wave23 <- funcs$read_fun(here(in_path, wave23_file))[wave == "wave2", wave := "wave1"]
+  wave23 <- wave23[wave == "wave3", wave := "wave2"]
+  waves <- rbind(wave12, wave13, wave23)
+  if (do_write) funcs$write_fun(waves, here(in_path, output_file))
+ 
+  waves
 
-wave12 <- fread(here(in_path, wave12_file))
-wave13 <- fread(here(in_path, wave13_file))[
-  wave == "wave3", wave := "wave2"]
-wave23 <- fread(here(in_path, wave23_file))[
-  wave == "wave2", wave := "wave1"][
-    wave == "wave3", wave := "wave2"]  ## Order matters!
+}
 
-waves <- rbind(wave12, wave13, wave23)
+g <- expand.grid(
+  output_type = c("projections", "noise_projs", "weights"),
+  do_network = c(FALSE, TRUE)
+)
 
-fwrite(waves, here(in_path, output_file))
+pwalk(g, gather_csvs, do_write = TRUE)

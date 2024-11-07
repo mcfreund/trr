@@ -11,15 +11,7 @@ library(patchwork)
 
 ## read data
 
-d <- readRDS(here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12.RDS"))
-
-
-## pick first resample and first ROI in core32 to characterize
-## plot: cosine similarity per dimension
-## plot: trial-level variance per dimension
-## plot: total variance (sum over all dimensions)
-
-## example roi
+d <- readRDS(here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess.RDS"))
 
 x <- d[test_session == "baseline" & task == "Stroop"]
 x[, proj_uv_scaled := abs(proj_uv_scaled)]
@@ -30,8 +22,46 @@ cols_by <- c("proj_uv_scaled", "proj_uv_relvar", "dimension", "var_total", "subj
 x_mean <- x[, lapply(.SD, mean), .SDcols = cols_values, by = cols_by]
 x_resamplei <- x[resample_idx == 1]
 
-saveRDS(x_mean, here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_means_baseline.RDS"))
-saveRDS(x_resamplei, here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_resample1_baseline.RDS"))
+saveRDS(x_mean, here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_means_baseline.RDS"))
+saveRDS(x_resamplei, here("out", "spatial", "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_resample1_baseline.RDS"))
 
-#rsync -avzP freundm@${ccplinux_ip}:/data/nil-external/ccp/freund/trr/out/spatial/noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_resample1_baseline.RDS /media/mcf/WD_BLACK/wustl_ccplinux1_backup/trr/out/spatial/
-#rsync -avzP freundm@${ccplinux_ip}:/data/nil-external/ccp/freund/trr/out/spatial/noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_means_baseline.RDS /media/mcf/WD_BLACK/wustl_ccplinux1_backup/trr/out/spatial/
+
+## ----
+
+x[, proj_mv_relvar := abs(proj_mv_relvar)]
+x[, proj_uv_relvar := abs(proj_uv_relvar)]
+x[, proj_uv_absvar := abs(proj_uv_relvar)*var_total]
+x[, proj_mv_absvar := abs(proj_mv_relvar)*var_total]
+x[, var_dim_uv := proj_uv_absvar / proj_uv_scaled]  ## variance per dimension
+x[, var_dim_mv := proj_mv_absvar / proj_rda_scaled]
+stopifnot(all.equal(x$var_dim_uv, x$var_dim_mv))  ## check for equality
+x <- x %>%
+  rename(var_dim = var_dim_mv, region = roi) %>%
+  mutate(var_dim_uv = NULL)
+
+
+## get noise alignment of each weight vector per dimension per region
+x_l <- melt(x,
+    measure.vars = c("proj_uv_scaled", "proj_rda_scaled"),
+    id.vars = c("subj", "region", "dimension", "resample_idx", "var_dim"))
+x_sum <- x_l[, .(
+    cosine_sim = tanh(mean(atanh(value))),
+    sd_dim = mean(sqrt(var_dim))),
+    by = .(subj, variable, region, dimension)]
+
+## get total noise (average SD per region*subject)
+x_total <- x[, .(
+    proj_mv_absvar = mean(sqrt(proj_mv_absvar)),
+    proj_uv_absvar = mean(sqrt(proj_uv_absvar))
+    ),
+    by = c("subj", "region", "wave", "resample_idx")]
+x_total[, delta_absvar := log(proj_uv_absvar / proj_mv_absvar)]
+x_total <- x_total[, .(
+    delta_absvar = mean(delta_absvar),
+    proj_mv_absvar = mean(proj_mv_absvar),
+    proj_uv_absvar = mean(proj_uv_absvar)
+    ),
+    by = c("region", "subj")]
+
+fwrite(x_total, here("out", "spatial", "noise_projs_mean_total.csv"))
+fwrite(x_sum, here("out", "spatial", "noise_projs_mean_spectrum.csv"))

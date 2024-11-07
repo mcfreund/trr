@@ -88,17 +88,56 @@ sessinfo <- dcast(sessinfo, ... ~ visit, value.var = "date_baseline")
 stopifnot(nrow(sessinfo) == length(subjs_models))
 
 sessinfo[, age_baseline := as.numeric(difftime(wave1, birthday, units = "days") / 365.25)]
-sessinfo[, time_12 := as.numeric(difftime(wave2, wave1, units = "days"))]
-sessinfo[, time_23 := as.numeric(difftime(wave3, wave2, units = "days"))]
-
-range(sessinfo$time_12)
-median(sessinfo$time_12)
-round(c(quantile(sessinfo$time_12, 0.25), quantile(sessinfo$time_12, 0.75)))
-sort(sessinfo$time_23[complete.cases(sessinfo$time_23)])
-
 table(sessinfo$sex)
 
 round(range(sessinfo$age_baseline))
 median(sessinfo$age_baseline)
 round(c(quantile(sessinfo$age_baseline, 0.25), quantile(sessinfo$age_baseline, 0.75)))
-sort(sessinfo$time_23[complete.cases(sessinfo$time_23)])
+
+
+## get dates ----
+
+wave1 <- fread(here("in", "dates_DMCC2.txt"))
+wave2 <- fread(here("in", "dates_DMCC3.txt"))
+wave3 <- fread(here("in", "dates_DMCC4.txt"))
+
+rep1 <- rbind(
+    wave1[sub.id %in% c(subjs_wave12_complete, subjs_wave13_all)],
+    wave2[sub.id %in% subjs_wave23_all]
+    ) %>%
+    select(-V1) %>% 
+    melt(id.vars = c("sub.id", "task.id"), variable.name = "run", value.name = "date") %>%
+    mutate(date = as.Date(date, format = "%m-%d-%Y")) %>%
+    group_by(sub.id) %>%
+    summarize(
+        start_rep1 = min(date, na.rm = TRUE),
+        end_rep1 = max(date, na.rm = TRUE)
+    )
+rep2 <- rbind(
+    wave2[sub.id %in% subjs_wave12_complete],
+    wave3[sub.id %in% c(subjs_wave13_all, subjs_wave23_all)]
+    ) %>% 
+    select(-V1) %>% 
+    melt(id.vars = c("sub.id", "task.id"), variable.name = "run", value.name = "date") %>%
+    mutate(date = as.Date(date, format = "%m-%d-%Y")) %>%
+    group_by(sub.id) %>%
+    summarize(
+        start_rep2 = min(date, na.rm = TRUE),
+        end_rep2 = max(date, na.rm = TRUE)
+    )
+
+data <- full_join(rep1, rep2, by = "sub.id")
+
+time_btw <- sort(data$start_rep2 - data$end_rep1)
+time_win1 <- sort(data$end_rep1 - data$start_rep1)
+time_win2 <- sort(data$end_rep2 - data$start_rep2)
+
+time_btw
+time_win1
+time_win2
+f <- c(range, median, IQR)
+lapply(f, function(x) x(time_btw))
+lapply(f, function(x) x(time_win1))
+lapply(f, function(x) x(time_win2))
+lapply(f, function(x) x(c(time_win1, time_win2)))
+

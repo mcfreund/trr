@@ -59,12 +59,16 @@ summarystats <- load_summaries(
   models_order = NULL
 )
 
-noiseprojs <- readRDS(
-  here(
-    "out", "spatial",
-    "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_resample1_baseline.RDS"
-  )
-)
+# noiseprojs <- readRDS(
+#   here(
+#     "out", "spatial",
+#     "noise_projs__stroop__rda__n_resamples100__demean_run__cv_allsess_wave12_resample1_baseline.RDS"
+#   )
+# )
+
+noiseprojs_total <- fread(here("out", "spatial", "noise_projs_mean_total.csv"))
+noiseprojs_spectrum <- fread(here("out", "spatial", "noise_projs_mean_spectrum.csv"))
+
 
 
 ## minor computations and formatting for plotting ----
@@ -112,16 +116,16 @@ popef_network <- popef %>%
 
 ## format weight-vector data
 
-noiseprojs[, proj_mv_relvar := abs(proj_mv_relvar)]
-noiseprojs[, proj_uv_relvar := abs(proj_uv_relvar)]
-noiseprojs[, proj_uv_absvar := abs(proj_uv_relvar)*var_total]
-noiseprojs[, proj_mv_absvar := abs(proj_mv_relvar)*var_total]
-noiseprojs[, var_dim_uv := proj_uv_absvar / proj_uv_scaled]  ## variance per dimension
-noiseprojs[, var_dim_mv := proj_mv_absvar / proj_rda_scaled]
-stopifnot(all.equal(noiseprojs$var_dim_uv, noiseprojs$var_dim_mv))  ## check for equality
-noiseprojs <- noiseprojs %>%
-  rename(var_dim = var_dim_mv, region = roi) %>%
-  mutate(var_dim_uv = NULL)
+# noiseprojs[, proj_mv_relvar := abs(proj_mv_relvar)]
+# noiseprojs[, proj_uv_relvar := abs(proj_uv_relvar)]
+# noiseprojs[, proj_uv_absvar := abs(proj_uv_relvar)*var_total]
+# noiseprojs[, proj_mv_absvar := abs(proj_mv_relvar)*var_total]
+# noiseprojs[, var_dim_uv := proj_uv_absvar / proj_uv_scaled]  ## variance per dimension
+# noiseprojs[, var_dim_mv := proj_mv_absvar / proj_rda_scaled]
+# stopifnot(all.equal(noiseprojs$var_dim_uv, noiseprojs$var_dim_mv))  ## check for equality
+# noiseprojs <- noiseprojs %>%
+#   rename(var_dim = var_dim_mv, region = roi) %>%
+#   mutate(var_dim_uv = NULL)
 
 
 ## reorder popef
@@ -651,16 +655,16 @@ ggsave(
 ## example ROI
 
 region_noiseproj <- "17Networks_RH_ContA_PFCl_3"
-noiseprojs_eg <- noiseprojs[region == region_noiseproj]
+noiseprojs_eg <- noiseprojs_spectrum[region == region_noiseproj]
 
 p_alignment_eg <-
   noiseprojs_eg %>%
-  melt(measure.vars = c("proj_uv_scaled", "proj_rda_scaled")) %>%
-  group_by(subj, region, dimension, variable) %>%
-  summarize(
-    cosine_sim = tanh(mean(atanh(value))),
-    sd_dim = mean(sqrt(var_dim))
-  ) %>% 
+  #melt(measure.vars = c("proj_uv_scaled", "proj_rda_scaled")) %>%
+  #group_by(subj, region, dimension, variable) %>%
+  #summarize(
+  #   cosine_sim = tanh(mean(atanh(value))),
+  #   sd_dim = mean(sqrt(var_dim))
+  # ) %>% 
   ggplot(aes(x = dimension)) +
   stat_summary(aes(y = sd_dim), geom = "point", fun = "mean", size = 1/3) +
   stat_summary(aes(y = sd_dim), geom = "line", fun = "mean", linewidth = 1/3) +
@@ -703,18 +707,19 @@ p_alignment_eg <-
 
 ## stats on all parcels*subjects
 p_totalnoise <-
-  noiseprojs[, c("region", "subj", "wave", "dimension", "proj_uv_absvar", "proj_mv_absvar")] %>%
+  #noiseprojs[, c("region", "subj", "wave", "dimension", "proj_uv_absvar", "proj_mv_absvar")] %>%
   ## get total SD (sum SDs over dimensions):
-  group_by(subj, region, wave) %>%
-  summarize(
-    proj_mv_absvar = mean(sqrt(proj_mv_absvar)),
-    proj_uv_absvar = mean(sqrt(proj_uv_absvar))
-  ) %>%
-  ## convert to units SD then get log ratio: univariate - multivariate total var:
-  mutate(delta_absvar = log(proj_uv_absvar / proj_mv_absvar)) %>%
-  ## average over waves:
-  group_by(subj, region) %>%
-  summarize(delta_absvar = mean(delta_absvar)) %>%
+  # group_by(subj, region, wave) %>%
+  # summarize(
+  #   proj_mv_absvar = mean(sqrt(proj_mv_absvar)),
+  #   proj_uv_absvar = mean(sqrt(proj_uv_absvar))
+  # ) %>%
+  # ## convert to units SD then get log ratio: univariate - multivariate total var:
+  # mutate(delta_absvar = log(proj_uv_absvar / proj_mv_absvar)) %>%
+  # ## average over waves:
+  # group_by(subj, region) %>%
+  # summarize(delta_absvar = mean(delta_absvar)) %>%
+  noiseprojs_total %>%
   ggplot(aes(delta_absvar)) +
   geom_histogram(position = "identity", alpha = 0.5, color = "black", bins = 20) +
   geom_vline(xintercept = 0, linetype = "dotted", color = "grey50") +

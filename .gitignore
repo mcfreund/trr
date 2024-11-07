@@ -40,9 +40,7 @@ vignettes/*.pdf
 
 
 # large output / data files
-out/timeseries/*
-!out/timeseries/glm_comparison_lssep_1rpm-vs-selav.csv
-!out/timeseries/deconvolved.h5
+out/timeseries/
 out/spatial/
 out/inferential/
 
@@ -68,3 +66,6 @@ in/*.RDS
 reports/figure/
 
 docs/
+
+trr_data_export.zip
+zenodo.sh
