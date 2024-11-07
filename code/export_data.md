@@ -27,7 +27,7 @@ zip -rv9 /data/nil-external/ccp/freund/trr/trr_data_export.zip $path_new
 ## upload to zenodo
 #git clone https://github.com/jhpoelen/zenodo-upload.git /data/nil-external/ccp/freund/zenodo-upload
 source zenodo.sh  ## export token
-/data/nil-external/ccp/freund/zenodo-upload/zenodo_upload.sh 14043319 /data/nil-external/ccp/freund/zenodo-upload --verbose
+/data/nil-external/ccp/freund/zenodo-upload/zenodo_upload.sh 14043319 /data/nil-external/ccp/freund/trr/trr_data_export.zip --verbose
 
 ```
 
