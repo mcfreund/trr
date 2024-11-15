@@ -11,7 +11,7 @@ For questions or concerns please raise an issue on GitHub.
 
 To reproduce the results and figures in the paper, you will need to:
 1. Clone this repository.
-2. Download the data derivatives from [https://doi.org/10.5281/zenodo.14043319](https://doi.org/10.5281/zenodo.14043319).
+2. Download the data derivatives from [https://doi.org/10.5281/zenodo.14043318](https://doi.org/10.5281/zenodo.14043318).
 3. Unpack the zipped file of data derivatives into the `out` directory of this repository.
 4. Skip down to the `Running Analyses` section of this README -- in particular, work through the `General Pipeline` subsection.
 
