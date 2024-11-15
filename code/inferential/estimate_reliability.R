@@ -48,19 +48,26 @@ source(here("code", "_constants.R"))
 source(here("code", "_paths.R"))
 source(here("code", "_subjects.R"))
 source(here("code", "timeseries", "_utils_fmri.R"))
+source(here("code", "inferential", "_parameters_reliability.R"))
 
 
 ################### Command line parameters ######################
 
 args <- commandArgs(trailingOnly = TRUE)
 
+if (interactive()) {
+  print("Running in interactive mode")
+  args <- c("rda", 4, 1, 17, "baseline", "network")
+}
+
 # Help
-if (length(args) == 0 || length(args) > 5) {
+if (length(args) == 0 || length(args) > 6) {
   print(paste(
     "Usage: Rscript estimate_reliability.R",
     "[response_name (rda/uv)] [n_cores (default = 4)]",
     "[roi_idx_first (default = 1)] [roi_idx_last (default = 2)]",
-    "[test_session (default = \"baseline\")]"
+    "[test_session (default = \"baseline\")]",
+    "[roi_col (default = \"parcel\")]"
   ))
   q()
 }
@@ -80,6 +87,7 @@ roi_idx <- roi_idx_first:roi_idx_last
 
 # Test on which session
 if (length(args) >= 5) sessions <- c(args[[5]]) else sessions <- c("baseline")
+if (length(args) >= 6) roi_col <- args[[6]] else roi_col <- "parcel"
 
 
 ########################## Constants ##############################
@@ -94,18 +102,28 @@ vterm <- switch(response_names[[1]],
 )
 model_names <- c("no_lscov_symm")
 
-
 ## Input from ./code/spatial/multi...task.R:
+
 fname <- here("out", "spatial",
-  "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv"
+  c(
+    parcel = "projections__stroop__rda__n_resamples100__demean_run__cv_allsess.csv",
+    network = "projections__stroop__rda__n_resamples100__demean_run__network__cv_allsess.csv")[args[6]]
 )
 
 # Output path
-out_path <- here("out", "inferential", "schaefer2018_17_400_fsaverage5")
+out_path <- here("out", "inferential", 
+  c(
+    parcel = "schaefer2018_17_400_fsaverage5",
+    network = "schaefer2018_17_400_fsaverage5_network")[args[6]]
+  )
 
 
 # ROIs
-rois <- readRDS(here("in", "rois.RDS"))
+if (args[6] %in% c("parcel", "network")) {
+  rois <- unique(schaefer2018_17_400_fsaverage5$key[[args[6]]])
+} else {
+  stop("Unknown roi col")
+}
 rois <- rois[roi_idx]
 
 # Make sure we don't use more cores than available
