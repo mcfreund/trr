@@ -4,7 +4,7 @@
 
 Test-Retest Reliability of fMRI measures in Dual Mechanisms of Cognitive Control dataset.
 This code is capable of reproducing all results and figures within [Freund, Chen, Chen, and Braver (2024; DOI: 10.1101/2024.04.24.591032)](https://doi.org/10.1101/2024.04.24.591032).
-For questions or concerns please raise an issue on GitHub.
+For questions or concerns please contact Mike Freund.
 
 
 ## Setup and downloading required dataset
